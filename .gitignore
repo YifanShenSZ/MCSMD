@@ -1,0 +1,9 @@
+MCSMD.exe
+*.mod
+My Advisor Results - v0/
+x64/
+*.u2d
+*.vfproj
+*.in
+*.SMD
+*.txt
