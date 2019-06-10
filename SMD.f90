@@ -6,9 +6,10 @@ module SMD
     implicit none
 
 !Derived type
-    type SMD3PArray
+    !Example: trajSMD(i).Order(j).Array(m) is < Q^(j-m) * P^m / (j-m)! / m! > at snap shot i
+    type SMDTrajectory
         type(d2PArray),allocatable,dimension(:)::Order
-    end type SMD3PArray
+    end type SMDTrajectory
 
 !Parameter
     integer::SMD_FollowStep=1000,&!Every how many steps print propagation
@@ -59,7 +60,7 @@ subroutine Dynamics()
     type(d2PArray),allocatable,dimension(:)::SMDquantityold
     !Data storage
         integer::TrajectoryLength
-        type(SMD3PArray),allocatable,dimension(:)::SMDatTime
+        type(SMDTrajectory),allocatable,dimension(:)::trajSMD
     !Job control
         OutputStep=ceiling(OutputInterval/dt)
         dt=OutputInterval/dble(OutputStep)
@@ -69,11 +70,11 @@ subroutine Dynamics()
     do i=0,SMDOrder
         allocate(SMDquantityold(i).Array(0:i))
     end do
-    allocate(SMDatTime(0:TrajectoryLength))!Allocate data storage
+    allocate(trajSMD(0:TrajectoryLength))!Allocate data storage
     do j=0,TrajectoryLength
-        allocate(SMDatTime(j).Order(SMD_OutputOrder))
+        allocate(trajSMD(j).Order(SMD_OutputOrder))
         do i=1,SMD_OutputOrder
-            allocate(SMDatTime(j).Order(i).Array(0:i))
+            allocate(trajSMD(j).Order(i).Array(0:i))
         end do
     end do
     SMDquantityold(0).Array(0)=1d0!Preloop
@@ -81,7 +82,7 @@ subroutine Dynamics()
         SMDquantityold(i).Array=SMDquantity(i).Array
     end forall
     forall(i=1:SMD_OutputOrder)
-        SMDatTime(0).Order(i).Array=SMDquantity(i).Array
+        trajSMD(0).Order(i).Array=SMDquantity(i).Array
     end forall
     write(*,*)'Total snap shots =',TotalSteps
     write(*,*)'Evolving...'
@@ -96,7 +97,7 @@ subroutine Dynamics()
         if(mod(istep,OutputStep)==0) then!Write trajectory
             j=istep/OutputStep
             forall(i=1:SMD_OutputOrder)
-                SMDatTime(j).Order(i).Array=SMDquantity(i).Array
+                trajSMD(j).Order(i).Array=SMDquantity(i).Array
             end forall
         end if
         do i=1,SMDEvolutionOrder!Check whether overflow
@@ -127,7 +128,7 @@ subroutine Dynamics()
         do istep=0,TrajectoryLength
             do i=1,SMD_OutputOrder
                 do j=0,i
-                    write(99,*)SMDatTime(istep).Order(i).Array(j)
+                    write(99,*)trajSMD(istep).Order(i).Array(j)
                 end do
             end do
         end do

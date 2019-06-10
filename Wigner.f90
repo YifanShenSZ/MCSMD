@@ -10,6 +10,11 @@ module Wigner
         real*8,allocatable,dimension(:)::b
     end type WignerCoefficient
 
+    !Example: trajwigcoeff(i).centre(k) contains the parameter of k-th centre at snap shot i
+    type WigCoeffTrajectory
+        type(WignerCoefficient),allocatable,dimension(:)::centre
+    end type WigCoeffTrajectory
+
 !Parameter:
     integer::MaxNCentre=1!Max number of centres allowed
     real*8::MaxPopDev=1d-6,&!Maximum population deviation from 1
@@ -564,9 +569,9 @@ real*8 function purity()
         Ak(2,2,k1)=sigmap_2
         Ak(2,1,k1)=-cor*sigmaqp_1
         Ak(:,:,k1)=Ak(:,:,k1)/temp
-        Bk(1,k1)=cor*miup*sigmaqp_1-miuq*sigmaq_2
-        Bk(2,k1)=cor*miuq*sigmaqp_1-miup*sigmap_2
-        Bk(:,k1)=-Bk(:,k1)/temp
+        Bk(1,k1)=miuq*sigmaq_2-cor*miup*sigmaqp_1
+        Bk(2,k1)=miup*sigmap_2-cor*miuq*sigmaqp_1
+        Bk(:,k1)=Bk(:,k1)/temp
         Ck(k1)=(miuq*miuq*sigmaq_2-2d0*cor*miuq*miup*sigmaqp_1+miup*miup*sigmap_2)/temp
         index=1!Construct X (save in Y)
         do i=0,BasisOrder
@@ -640,7 +645,7 @@ real*8 function purity()
         purity=purity+dot_product(M_purity,matmul(U_Coeff,TAU*matmul(Y,d)))&
             *sigmaq*sigmap/wigcoeff(k1).sigmaq/wigcoeff(k1).sigmap/wigcoeff(k2).sigmaq/wigcoeff(k2).sigmap&
             *dSqrt((1d0-cor*cor)/(1d0-wigcoeff(k1).cor*wigcoeff(k1).cor)/(1d0-wigcoeff(k2).cor*wigcoeff(k2).cor))&
-            *dExp(-0.5d0*(dot_product(miuvec,Bk1k2)-Ck(k1)-Ck(k2)))
+            *dExp(0.5d0*(dot_product(miuvec,Bk1k2)-Ck(k1)-Ck(k2)))
         do k2=k1+1,NCentre
             Ak1k2=Ak(:,:,k1)+Ak(:,:,k2)!Compute miuq_k1k2, miup_k1k2, sigmaq_k1k2, sigmap_k1k2, cor_k1k2
             call My_dpotri(Ak1k2,2)
@@ -692,7 +697,7 @@ real*8 function purity()
             purity=purity+2d0*dot_product(M_purity,matmul(U_Coeff,TAU*matmul(Y,d)))&
                 *sigmaq*sigmap/wigcoeff(k1).sigmaq/wigcoeff(k1).sigmap/wigcoeff(k2).sigmaq/wigcoeff(k2).sigmap&
                 *dSqrt((1d0-cor*cor)/(1d0-wigcoeff(k1).cor*wigcoeff(k1).cor)/(1d0-wigcoeff(k2).cor*wigcoeff(k2).cor))&
-                *dExp(-0.5d0*(dot_product(miuvec,Bk1k2)-Ck(k1)-Ck(k2)))
+                *dExp(0.5d0*(dot_product(miuvec,Bk1k2)-Ck(k1)-Ck(k2)))
         end do
     end do
     purity=purity*hbar
