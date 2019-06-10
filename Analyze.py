@@ -7,8 +7,8 @@ import numpy
 import matplotlib.pyplot as plt
 import matplotlib.animation as anm
 #sys.path.append('/home-4/yshen57@jhu.edu/Library/Python-Library')# My library path on MARCC
-#sys.path.append('C:\\Python-Library')# My library path on my Lenovo-E540
-sys.path.append('C:\\Users\\56402\\OneDrive\\Research\\Source\\Python')# My library path on my surface pro
+sys.path.append('C:\\Python-Library')# My library path on my Lenovo-E540
+#sys.path.append('C:\\Users\\56402\\OneDrive\\Research\\Source\\Python')# My library path on my surface pro
 from PythonLibrary import *
 
 ''' Auxiliary routine '''

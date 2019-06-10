@@ -61,28 +61,32 @@ subroutine Dynamics()
     !Data storage
         integer::TrajectoryLength
         type(SMDTrajectory),allocatable,dimension(:)::trajSMD
+        real*8,allocatable,dimension(:)::trajpurity
     !Job control
         OutputStep=ceiling(OutputInterval/dt)
         dt=OutputInterval/dble(OutputStep)
         TrajectoryLength=ceiling(TotalTime/OutputInterval)
         TotalSteps=TrajectoryLength*OutputStep
+    !Allocate data storage
+        allocate(trajSMD(0:TrajectoryLength))
+        do j=0,TrajectoryLength
+            allocate(trajSMD(j).Order(SMD_OutputOrder))
+            do i=1,SMD_OutputOrder
+                allocate(trajSMD(j).Order(i).Array(0:i))
+            end do
+        end do
+        forall(i=1:SMD_OutputOrder)
+            trajSMD(0).Order(i).Array=SMDquantity(i).Array
+        end forall
+        allocate(trajpurity(0:TrajectoryLength))
+        trajpurity(0)=purity()
     allocate(SMDquantityold(0:SMDOrder))!Allocate local work space
     do i=0,SMDOrder
         allocate(SMDquantityold(i).Array(0:i))
     end do
-    allocate(trajSMD(0:TrajectoryLength))!Allocate data storage
-    do j=0,TrajectoryLength
-        allocate(trajSMD(j).Order(SMD_OutputOrder))
-        do i=1,SMD_OutputOrder
-            allocate(trajSMD(j).Order(i).Array(0:i))
-        end do
-    end do
     SMDquantityold(0).Array(0)=1d0!Preloop
     forall(i=1:SMDEvolutionOrder)
         SMDquantityold(i).Array=SMDquantity(i).Array
-    end forall
-    forall(i=1:SMD_OutputOrder)
-        trajSMD(0).Order(i).Array=SMDquantity(i).Array
     end forall
     write(*,*)'Total snap shots =',TotalSteps
     write(*,*)'Evolving...'
@@ -99,6 +103,7 @@ subroutine Dynamics()
             forall(i=1:SMD_OutputOrder)
                 trajSMD(j).Order(i).Array=SMDquantity(i).Array
             end forall
+            trajpurity(j)=purity()
         end if
         do i=1,SMDEvolutionOrder!Check whether overflow
             do j=0,i
@@ -106,13 +111,9 @@ subroutine Dynamics()
             end do
             if(j<=i) exit
         end do
-        if(i<=SMDEvolutionOrder) then
+        if(i<=SMDEvolutionOrder) then!Overflow, stop evolution
             TrajectoryLength=istep/OutputStep
             write(*,*)'Overflow at',istep*dt
-            do i=1,SMDEvolutionOrder
-                write(*,*)'Order',i
-                write(*,*)SMDquantityold(i).Array
-            end do
             exit
         end if
         forall(i=1:SMDEvolutionOrder)!Get ready for next loop
@@ -131,6 +132,11 @@ subroutine Dynamics()
                     write(99,*)trajSMD(istep).Order(i).Array(j)
                 end do
             end do
+        end do
+    close(99)
+    open(unit=99,file='purity.SMD',status='replace')
+        do i=0,TrajectoryLength
+            write(99,*)trajpurity(i)
         end do
     close(99)
 end subroutine Dynamics

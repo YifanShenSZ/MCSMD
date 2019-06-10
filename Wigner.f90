@@ -176,9 +176,6 @@ subroutine CutOffScheme(u)
     if(dAbs(xi(1)-1d0)>MaxPopDev) then
         write(*,*)'Too large population fluctuation:',xi(1)-1d0
     end if
-    if(dAbs(purity()-InitialPurity)>MaxImpurity) then
-        write(*,*)'Too large purity fluctuation:',purity()-1d0
-    end if
     u(1).Array(0)=xi(2)*sigmaq+q!Replace with fitted location and width
     u(1).Array(1)=xi(3)*sigmap+p
     u(2).Array(0)=dSqrt(2d0*xi(4)*sigmaq*sigmaq+2d0*q*u(1).Array(0)-q*q-u(1).Array(0)*u(1).Array(0))
@@ -623,7 +620,7 @@ real*8 function purity()
                     do n=0,i
                         do m=0,j
                             if(max(0,m+i-j)<=n.and.n<=min(m,i)) then
-                                BlockTemp(j,i).Matrix(m,n)=cbn(i-n).Array(j-m)*cbn(n).Array(m)*miuq**(i-n-j+m)*miup**(n-m)
+                                BlockTemp(j,i).Matrix(m,n)=cbn(j-m).Array(i-n)*cbn(m).Array(n)*miuq**(j-m-i+n)*miup**(m-n)
                             else
                                 BlockTemp(j,i).Matrix(m,n)=0d0
                             end if
@@ -675,7 +672,7 @@ real*8 function purity()
                     do n=0,i
                         do m=0,j
                             if(max(0,m+i-j)<=n.and.n<=min(m,i)) then
-                                BlockTemp(j,i).Matrix(m,n)=cbn(i-n).Array(j-m)*cbn(n).Array(m)*miuq**(i-n-j+m)*miup**(n-m)
+                                BlockTemp(j,i).Matrix(m,n)=cbn(j-m).Array(i-n)*cbn(m).Array(n)*miuq**(j-m-i+n)*miup**(m-n)
                             else
                                 BlockTemp(j,i).Matrix(m,n)=0d0
                             end if

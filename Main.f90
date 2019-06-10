@@ -90,7 +90,7 @@ subroutine Initialize()
         SMDquantity(2).Array(2)=sigmap
         do i=4,SMDEvolutionOrder
             do j=0,i,2
-                SMDquantity(i).Array(j)=fct2(i-j)*fct2(j)/fct(i-j)/fct(j)
+                SMDquantity(i).Array(j)=fct2(i-j-1)*fct2(j-1)/fct(i-j)/fct(j)
             end do
         end do
         !Initial Wigner distribution: accordingly
