@@ -76,16 +76,13 @@ end subroutine ReadInput
 subroutine Initialize()
     integer::i,j
     real*8::sigmap
+    call BetterRandomSeed()
     call InitializeBasic()
     call InitializeWigner()
     call InitializeSMD()
     if(JobType=='SMD') then!Allocate dynamics work space, provide initial value
-        allocate(SMDquantity(SMDEvolutionOrder))
-        do i=1,SMDEvolutionOrder
-            allocate(SMDquantity(i).Array(0:i))
-            SMDquantity(i).Array=0d0
-        end do
         !Initial condition: gaussian wave packet
+        !Initial time-dependently evolved SMD quantity: accordingly
         sigmap=0.5d0/sigmaq
         SMDquantity(1).Array(0)=q0
         SMDquantity(1).Array(1)=p0
@@ -96,7 +93,7 @@ subroutine Initialize()
                 SMDquantity(i).Array(j)=fct2(i-j)*fct2(j)/fct(i-j)/fct(j)
             end do
         end do
-        !Initial Wigner distribution: Wigner transformation of gaussian wave packet
+        !Initial Wigner distribution: accordingly
         NCentre=1
         wigcoeff(1).miuq=q0
         wigcoeff(1).miup=p0

@@ -1,8 +1,7 @@
 !Library interface, data storage, basic routine
-!Modify this module for different potential
 !
 !SMD terms no higher than SMDEvolutionOrder are evolved time-dependently
-!SMDEvolutionOrder+1 : SMDOrder are predicted by evolved terms
+!SMDEvolutionOrder+1 : SMDOrder are predicted based on evolved terms
 !For polynomial potential, SMDOrder = SMDEvolutionOrder + PotentialOrder - 2
 module Basic
     use General
@@ -10,11 +9,6 @@ module Basic
     use LinearAlgebra
     use NonlinearOptimization
     implicit none
-
-!Derived type
-    type SMD3PArray
-        type(d2PArray),allocatable,dimension(:)::Order
-    end type SMD3PArray
 
 !Programwide accessed input variable
     real*8::mass,TotalTime,dt,OutputInterval

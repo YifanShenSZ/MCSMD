@@ -23,14 +23,10 @@ module Wigner
 
 !Wigner module only variable
     integer::NLinearCoeffSC!Number of linear coefficients for a single centre
-    !Work space for evaluating SMD quantity and fitting Wigner distribution
-    real*8,allocatable,dimension(:)::SIGMA,SIGMAk,SIGMAkAlphaBeta,dSIGMAk
-    real*8,allocatable,dimension(:,:)::U_Coeff,U_SMDEvolution,U_SMD,M_SMDEvolution,M_SMD,Wk_SMDEvolution,Wk_SMD,dWk
-    type(d2PMatrix),allocatable,dimension(:,:)::BlockTemp
-    !Purity work space
-    type(d2PMatrix),allocatable,dimension(:)::Ak
-    type(d2PArray),allocatable,dimension(:)::Bk
-    real*8,allocatable,dimension(:)::Ck
+    !U and M has no time dependence
+    real*8,allocatable,dimension(:,:)::U_Coeff,U_SMDEvolution,U_SMD,M_SMDEvolution,M_SMD
+    real*8,allocatable,dimension(:)::M_purity
+    type(d2PMatrix),allocatable,dimension(:,:)::BlockTemp!Work space
 
 contains
 subroutine InitializeWigner()
@@ -45,14 +41,6 @@ subroutine InitializeWigner()
         allocate(wigcoeff(i).b(NLinearCoeffSC))
     end do
     !Work space for evaluating SMD quantity and fitting Wigner distribution
-    allocate(SIGMA(NSMDQuantity))
-    allocate(SIGMAk(NSMDQuantity))
-    allocate(SIGMAkAlphaBeta(NSMDQuantity))
-    SIGMA(1)=1d0
-    SIGMAk(1)=1d0
-    SIGMAkAlphaBeta(1)=1d0
-    allocate(dSIGMAk(NSMDQuantityEvolution))
-    dSIGMAk(1)=0d0
     !Canonical transformation matrix from (q-miu_q)/sigma_q,(p-miu_p)/sigma_p to alpha,beta
         allocate(Utemp(2:max(SMDOrder,BasisOrder)))!Prepare
         do j=2,max(SMDOrder,BasisOrder)
@@ -145,28 +133,23 @@ subroutine InitializeWigner()
                 end do
                 index=index+i+1
             end do
+        allocate(M_purity(NLinearCoeffSC))!Map purity, i.e. only 1st row is required
+            index=1
+            do i=0,BasisOrder
+                M_purity(index:index+i)=Mtemp(0,i).Matrix(0,:)
+                index=index+i+1
+            end do
         do i=0,BasisOrder!Clean up
             do j=0,SMDOrder
                 deallocate(Mtemp(j,i).Matrix)
             end do
         end do
         deallocate(Mtemp)
-    allocate(Wk_SMDEvolution(NSMDQuantityEvolution,NSMDQuantityEvolution))
-    allocate(Wk_SMD(NSMDQuantity,NSMDQuantity))
-    allocate(dWk(NSMDQuantityEvolution,NSMDQuantityEvolution))
     allocate(BlockTemp(0:SMDOrder,0:SMDOrder))
     do i=0,SMDOrder
         do j=0,SMDOrder
             allocate(BlockTemp(j,i).Matrix(0:j,0:i))
         end do
-    end do
-    !Purity work space
-    allocate(Ak(MaxNCentre))
-    allocate(Bk(MaxNCentre))
-    allocate(Ck(MaxNCentre))
-    do i=1,MaxNCentre
-        allocate(Ak(i).Matrix(2,2))
-        allocate(Bk(i).Array(2))
     end do
 end subroutine InitializeWigner
 
@@ -175,7 +158,8 @@ subroutine CutOffScheme(u)
     type(d2PArray),dimension(0:SMDOrder),intent(inout)::u
     integer::i,j,m,n,index,indexwrow
     real*8::q,p,sigmaq,sigmap
-    real*8,dimension(NSMDQuantity)::xi
+    real*8,dimension(NSMDQuantity)::SIGMA,SIGMAfit,xi
+    real*8,dimension(NSMDQuantity,NSMDQuantity)::W
     !First, use time-dependently evolved SMD quantities to fit a Wigner distribution
     call FitWignerDistribution(u(1:SMDEvolutionOrder))
     !Then compute all terms based on the fitted Wigner distribution
@@ -187,19 +171,25 @@ subroutine CutOffScheme(u)
     if(dAbs(xi(1)-1d0)>MaxPopDev) then
         write(*,*)'Too large population fluctuation:',xi(1)-1d0
     end if
+    if(dAbs(purity()-InitialPurity)>MaxImpurity) then
+        write(*,*)'Too large purity fluctuation:',purity()-1d0
+    end if
     u(1).Array(0)=xi(2)*sigmaq+q!Replace with fitted location and width
     u(1).Array(1)=xi(3)*sigmap+p
     u(2).Array(0)=dSqrt(2d0*xi(4)*sigmaq*sigmaq+2d0*q*u(1).Array(0)-q*q-u(1).Array(0)*u(1).Array(0))
     u(2).Array(2)=dSqrt(2d0*xi(6)*sigmap*sigmap+2d0*p*u(1).Array(1)-p*p-u(1).Array(1)*u(1).Array(1))
     !Transform other terms to new location and width
-    index=2!Construct SIGMA^fit (in SIGMAk), SIGMA is done during calling EvaluateSMDQuantity
+    SIGMA(1)=1d0!Construct SIGMA and SIGMA^fit
+    SIGMAfit(1)=1d0
+    index=2
     do i=1,SMDOrder
         do j=0,i
-            SIGMAk(index)=u(2).Array(0)**(i-j)*u(2).Array(2)**j
+            SIGMA(index)=sigmaq**(i-j)*sigmap**j
+            SIGMAfit(index)=u(2).Array(0)**(i-j)*u(2).Array(2)**j
             index=index+1
         end do
     end do
-    q=q-u(1).Array(0)!Construct W (in Wk_SMD)
+    q=q-u(1).Array(0)!Construct W
     p=p-u(1).Array(1)
     index=1
     do i=0,SMDOrder
@@ -214,12 +204,12 @@ subroutine CutOffScheme(u)
                     end if
                 end do
             end do
-            Wk_SMD(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
+            W(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
             indexwrow=indexwrow+j+1
         end do
         index=index+i+1
     end do
-    xi=matmul(Wk_SMD,SIGMA*xi)/SIGMAk
+    xi=matmul(W,SIGMA*xi)/SIGMAfit
     u(2).Array(1)=xi(5)
     index=7
     do i=3,SMDOrder
@@ -235,9 +225,11 @@ end subroutine CutOffScheme
 subroutine FitWignerDistribution(u)
     type(d2PArray),dimension(SMDEvolutionOrder),intent(inout)::u
     integer::NCoefficient,index,i,j
-    real*8::q,p,sigmaq,sigmap!These will be used in contained subroutines
-    real*8,dimension(NSMDQuantityEvolution)::xi
+    real*8::sigmaq,sigmap
     real*8,allocatable,dimension(:)::c!Fit coefficient vector
+    !Following will be used in contained subroutines
+    real*8::q,p
+    real*8,dimension(NSMDQuantityEvolution)::SIGMA,xi
     !Prepare
         NCoefficient=NCentre*(5+NLinearCoeffSC)
         q=u(1).Array(0)
@@ -257,7 +249,8 @@ subroutine FitWignerDistribution(u)
         end do
         allocate(c(NCoefficient))
         call wigcoeff2c(c,NCoefficient)
-        index=2!Construct SIGMA
+        SIGMA(1)=1d0!Construct SIGMA
+        index=2
         do i=1,SMDEvolutionOrder
             do j=0,i
                 SIGMA(index)=sigmaq**(i-j)*sigmap**j
@@ -273,6 +266,9 @@ subroutine FitWignerDistribution(u)
         real*8,dimension(dimvar),intent(in)::c
         integer::k,i,j,m,n,index,indexwrow
         real*8::miuqk,miupk,sigmaqk,sigmapk,sigmaalphak,sigmabetak
+        real*8,dimension(NSMDQuantityEvolution)::SIGMAk,SIGMAkAlphaBeta
+        real*8,dimension(NSMDQuantityEvolution,NSMDQuantityEvolution)::Wk
+        !SIGMA has been constructed before calling TrustRegion
         call c2wigcoeff(c,dimvar)
         r=0d0
         do k=1,NCentre
@@ -282,7 +278,9 @@ subroutine FitWignerDistribution(u)
             sigmapk=wigcoeff(k).sigmap
             sigmaalphak=dSqrt(1d0+wigcoeff(k).cor)
             sigmabetak= dSqrt(1d0-wigcoeff(k).cor)
-            index=2!Construct SIGMA_k, SIGMA_k^AlphaBeta
+            SIGMAk(1)=1d0!Construct SIGMA_k, SIGMA_k^AlphaBeta
+            SIGMAkAlphaBeta(1)=1d0
+            index=2
             do i=1,SMDEvolutionOrder
                 do j=0,i
                     SIGMAk(index)=sigmaqk**(i-j)*sigmapk**j
@@ -303,14 +301,14 @@ subroutine FitWignerDistribution(u)
                             end if
                         end do
                     end do
-                    Wk_SMDEvolution(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
+                    Wk(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
                     indexwrow=indexwrow+j+1
                 end do
                 index=index+i+1
             end do
-            r=r+matmul(Wk_SMDEvolution,SIGMAk(1:NSMDQuantityEvolution)*matmul(U_SMDEvolution,SIGMAkAlphaBeta(1:NSMDQuantityEvolution)*matmul(M_SMDEvolution,matmul(U_Coeff,wigcoeff(k).b))))
+            r=r+matmul(Wk,SIGMAk*matmul(U_SMDEvolution,SIGMAkAlphaBeta*matmul(M_SMDEvolution,matmul(U_Coeff,wigcoeff(k).b))))
         end do
-        r=r/SIGMA(1:NSMDQuantityEvolution)-xi
+        r=r/SIGMA-xi
     end subroutine residue
     integer function jacobian(Jacob,c,dimdat,dimvar)
         integer,intent(in)::dimdat,dimvar
@@ -318,8 +316,10 @@ subroutine FitWignerDistribution(u)
         real*8,dimension(dimvar),intent(in)::c
         integer::indexj,k,i,j,m,n,index,indexwrow
         real*8::miuqk,miupk,sigmaqk,sigmapk,sigmaalphak,sigmabetak
-        real*8,dimension(NLinearCoeffSC)::vectortemp
-        real*8,dimension(NLinearCoeffSC,NLinearCoeffSC)::matrixtemp
+        real*8,dimension(NSMDQuantityEvolution)::SIGMAk,SIGMAkAlphaBeta,dSIGMAk,vectortemp
+        real*8,dimension(NSMDQuantityEvolution,NSMDQuantityEvolution)::Wk,dWk
+        real*8,dimension(NSMDQuantityEvolution,NLinearCoeffSC)::matrixtemp
+        !SIGMA has been constructed before calling TrustRegion
         call c2wigcoeff(c,dimvar)
         indexj=0
         do k=1,NCentre
@@ -329,7 +329,9 @@ subroutine FitWignerDistribution(u)
             sigmapk=wigcoeff(k).sigmap
             sigmaalphak=dSqrt(1d0+wigcoeff(k).cor)
             sigmabetak= dSqrt(1d0-wigcoeff(k).cor)
-            index=2!Construct SIGMA_k, SIGMA_k^AlphaBeta
+            SIGMAk(1)=1d0!Construct SIGMA_k, SIGMA_k^AlphaBeta
+            SIGMAkAlphaBeta(1)=1d0
+            index=2
             do i=1,SMDEvolutionOrder
                 do j=0,i
                     SIGMAk(index)=sigmaqk**(i-j)*sigmapk**j
@@ -350,39 +352,42 @@ subroutine FitWignerDistribution(u)
                             end if
                         end do
                     end do
-                    Wk_SMDEvolution(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
+                    Wk(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
                     indexwrow=indexwrow+j+1
                 end do
                 index=index+i+1
             end do
             !Nonlinear part
             vectortemp=matmul(M_SMDEvolution,matmul(U_Coeff,wigcoeff(k).b))
-            index=2!Construct dSIGMA_k^AlphaBeta / dtheta_k
+            dSIGMAk(1)=0d0!Construct dSIGMA_k^AlphaBeta / dtheta_k (save in dSIGMAk)
+            index=2
             do i=1,SMDEvolutionOrder
                 do j=0,i
                     dSIGMAk(index)=(dble(i-j)*sigmaalphak**(i-j-2)*sigmabetak**(j)-dble(j)*sigmaalphak**(i-j)*sigmabetak**(j-2))/2d0
                     index=index+1
                 end do
             end do
-            Jacob(:,indexj+5)=dCos(c(indexj+5))*matmul(Wk_SMDEvolution,SIGMAk(1:NSMDQuantityEvolution)*matmul(U_SMDEvolution,dSIGMAk*vectortemp))
-            vectortemp=matmul(U_SMDEvolution,SIGMAkAlphaBeta(1:NSMDQuantityEvolution)*vectortemp)
-            index=2!Construct dSIGMA_k / dsigma_qk
+            Jacob(:,indexj+5)=dCos(c(indexj+5))*matmul(Wk,SIGMAk*matmul(U_SMDEvolution,dSIGMAk*vectortemp))
+            vectortemp=matmul(U_SMDEvolution,SIGMAkAlphaBeta*vectortemp)
+            dSIGMAk(1)=0d0!Construct dSIGMA_k / dsigma_qk
+            index=2
             do i=1,SMDEvolutionOrder
                 do j=0,i
                     dSIGMAk(index)=dble(i-j)*sigmaqk**(i-j-1)*sigmapk**j
                     index=index+1
                 end do
             end do
-            Jacob(:,indexj+3)=matmul(Wk_SMDEvolution,dSIGMAk*vectortemp)
-            index=2!Construct dSIGMA_k / dsigma_pk
+            Jacob(:,indexj+3)=matmul(Wk,dSIGMAk*vectortemp)
+            dSIGMAk(1)=0d0!Construct dSIGMA_k / dsigma_pk
+            index=2
             do i=1,SMDEvolutionOrder
                 do j=0,i
                     dSIGMAk(index)=dble(j)*sigmaqk**(i-j)*sigmapk**(j-1)
                     index=index+1
                 end do
             end do
-            Jacob(:,indexj+4)=matmul(Wk_SMDEvolution,dSIGMAk*vectortemp)
-            vectortemp=SIGMAk(1:NSMDQuantityEvolution)*vectortemp
+            Jacob(:,indexj+4)=matmul(Wk,dSIGMAk*vectortemp)
+            vectortemp=SIGMAk*vectortemp
             index=1!Construct dW_k / dsigma_qk
             do i=0,SMDEvolutionOrder
                 indexwrow=1
@@ -431,7 +436,7 @@ subroutine FitWignerDistribution(u)
                 matrixtemp(i,:)=matrixtemp(i,:)*SIGMAk(i)
             end forall
             indexj=indexj+5
-            Jacob(:,indexj+1:indexj+NLinearCoeffSC)=matmul(Wk_SMDEvolution,matrixtemp)
+            Jacob(:,indexj+1:indexj+NLinearCoeffSC)=matmul(Wk,matrixtemp)
             indexj=indexj+NLinearCoeffSC
         end do
         forall(i=1:NSMDQuantityEvolution)
@@ -482,7 +487,10 @@ subroutine EvaluateSMDQuantity(xi,q,p,sigmaq,sigmap)!Evaluate SMD quantity from 
     real*8,intent(in)::q,p,sigmaq,sigmap
     integer::k,i,j,m,n,index,indexwrow
     real*8::miuqk,miupk,sigmaqk,sigmapk,sigmaalphak,sigmabetak
-    index=2!Construct SIGMA
+    real*8,dimension(NSMDQuantity)::SIGMA,SIGMAk,SIGMAkAlphaBeta
+    real*8,dimension(NSMDQuantity,NSMDQuantity)::Wk
+    SIGMA(1)=1d0!Construct SIGMA
+    index=2
     do i=1,SMDOrder
         do j=0,i
             SIGMA(index)=sigmaq**(i-j)*sigmap**j
@@ -497,7 +505,9 @@ subroutine EvaluateSMDQuantity(xi,q,p,sigmaq,sigmap)!Evaluate SMD quantity from 
         sigmapk=wigcoeff(k).sigmap
         sigmaalphak=dSqrt(1d0+wigcoeff(k).cor)
         sigmabetak= dSqrt(1d0-wigcoeff(k).cor)
-        index=2!Construct SIGMA_k, SIGMA_k^AlphaBeta
+        SIGMAk(1)=1d0!Construct SIGMA_k, SIGMA_k^AlphaBeta
+        SIGMAkAlphaBeta(1)=1d0
+        index=2
         do i=1,SMDOrder
             do j=0,i
                 SIGMAk(index)=sigmaqk**(i-j)*sigmapk**j
@@ -518,41 +528,174 @@ subroutine EvaluateSMDQuantity(xi,q,p,sigmaq,sigmap)!Evaluate SMD quantity from 
                         end if
                     end do
                 end do
-                Wk_SMD(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
+                Wk(indexwrow:indexwrow+j,index:index+i)=BlockTemp(j,i).Matrix
                 indexwrow=indexwrow+j+1
             end do
             index=index+i+1
         end do
-        xi=xi+matmul(Wk_SMD,SIGMAk*matmul(U_SMD,SIGMAkAlphaBeta*matmul(M_SMD,matmul(U_Coeff,wigcoeff(k).b))))
+        xi=xi+matmul(Wk,SIGMAk*matmul(U_SMD,SIGMAkAlphaBeta*matmul(M_SMD,matmul(U_Coeff,wigcoeff(k).b))))
     end do
     xi=xi/SIGMA
 end subroutine EvaluateSMDQuantity
 
 real*8 function purity()
-    integer::k1,k2
-    real*8::temp,sigmaq_2,sigmap_2,sigmaqp_1
+    integer::k1,k2,i,j,m,n,index,indexrow
+    real*8::miuq,miup,sigmaq,sigmap,cor,temp,sigmaq_2,sigmap_2,sigmaqp_1
+    real*8,dimension(2,2,NCentre)::Ak
+    real*8,dimension(2,NCentre)::Bk
+    real*8,dimension(NCentre)::Ck
+    real*8,dimension(NLinearCoeffSC,NCentre)::a
+    real*8,dimension(2)::miuvec,Bk1k2
+    real*8,dimension(2,2)::Ak1k2
+    real*8,dimension(NLinearCoeffSC)::d,TAU
+    real*8,dimension(NLinearCoeffSC,NLinearCoeffSC)::Y
     purity=0d0!Prepare
     do k1=1,NCentre
-        temp=1d0-wigcoeff(k1).cor*wigcoeff(k1).cor
-        sigmaq_2=1d0/wigcoeff(k1).sigmaq/wigcoeff(k1).sigmaq
-        sigmap_2=1d0/wigcoeff(k1).sigmap/wigcoeff(k1).sigmap
-        sigmaqp_1=1d0/wigcoeff(k1).sigmaq/wigcoeff(k1).sigmap
-        Ak(k1).Matrix(1,1)=sigmaq_2!Construct Ak
-        Ak(k1).Matrix(2,1)=-wigcoeff(k1).cor*sigmaqp_1
-        Ak(k1).Matrix(1,2)=A(k1).Matrix(2,1)
-        Ak(k1).Matrix(2,2)=sigmap_2
-        Ak(k1).Matrix=A(k1).Matrix/temp
-        Bk(k1).Array(1)=wigcoeff(k1).cor*wigcoeff(k1).miup*sigmaqp_1-wigcoeff(k1).miuq*sigmaq_2
-        Bk(k1).Array(2)=wigcoeff(k1).cor*wigcoeff(k1).miuq*sigmaqp_1-wigcoeff(k1).miup*sigmap_2
-        Bk(k1).Array=-Bk(k1).Array/temp
-        Ck(k1)=(wigcoeff(k1).miuq*wigcoeff(k1).miuq*sigmaq_2-2d0*wigcoeff(k1).cor*wigcoeff(k1).miuq*wigcoeff(k1).miup*sigmaqp_1&
-               +wigcoeff(k1).miup*wigcoeff(k1).miup*sigmap_2)/temp
+        miuq=wigcoeff(k1).miuq
+        miup=wigcoeff(k1).miup
+        sigmaq=wigcoeff(k1).sigmaq
+        sigmap=wigcoeff(k1).sigmap
+        cor=wigcoeff(k1).cor
+        temp=1d0-cor*cor!Construct Ak, Bk, Ck
+        sigmaq_2=1d0/sigmaq/sigmaq
+        sigmap_2=1d0/sigmap/sigmap
+        sigmaqp_1=1d0/sigmaq/sigmap
+        Ak(1,1,k1)=sigmaq_2
+        Ak(2,2,k1)=sigmap_2
+        Ak(2,1,k1)=-cor*sigmaqp_1
+        Ak(:,:,k1)=Ak(:,:,k1)/temp
+        Bk(1,k1)=cor*miup*sigmaqp_1-miuq*sigmaq_2
+        Bk(2,k1)=cor*miuq*sigmaqp_1-miup*sigmap_2
+        Bk(:,k1)=-Bk(:,k1)/temp
+        Ck(k1)=(miuq*miuq*sigmaq_2-2d0*cor*miuq*miup*sigmaqp_1+miup*miup*sigmap_2)/temp
+        index=1!Construct X (save in Y)
+        do i=0,BasisOrder
+            indexrow=1
+            do j=0,BasisOrder
+                do n=0,i
+                    do m=0,j
+                        if(max(0,n+j-i)<=m.and.m<=min(n,j)) then
+                            BlockTemp(j,i).Matrix(m,n)=(-miuq)**(i-n-j+m)*(-miup)**(n-m)/fct(i-n-j+m)/fct(n-m)/fct(j-m)/fct(m)
+                        else
+                            BlockTemp(j,i).Matrix(m,n)=0d0
+                        end if
+                    end do
+                end do
+                Y(indexrow:indexrow+j,index:index+i)=BlockTemp(j,i).Matrix
+                indexrow=indexrow+j+1
+            end do
+            index=index+i+1
+        end do
+        a(:,k1)=matmul(Y,wigcoeff(k1).b)
     end do
     do k1=1,NCentre
+        k2=k1
+            Ak1k2=Ak(:,:,k1)+Ak(:,:,k2)!Compute miuq_k1k2, miup_k1k2, sigmaq_k1k2, sigmap_k1k2, cor_k1k2
+            call My_dpotri(Ak1k2,2)
+            Ak1k2(1,2)=Ak1k2(2,1)
+            Bk1k2=Bk(:,k1)+Bk(:,k2)
+            miuvec=matmul(Ak1k2,Bk1k2)
+            miuq=miuvec(1)
+            miup=miuvec(2)
+            sigmaq=dSqrt(Ak1k2(1,1))
+            sigmap=dSqrt(Ak1k2(2,2))
+            cor=Ak1k2(2,1)/sigmaq/sigmap
+            d=0d0!Construct d_k1k2
+            index=1
+            do i=0,BasisOrder
+                do n=0,i
+                    do j=0,i
+                        do m=max(0,n+j-i),min(n,j)
+                            d(index)=d(index)+a(o2v(i-j,n-m),k1)*a(o2v(j,m),k2)
+                        end do
+                    end do
+                end do
+            end do
+            index=1!Construct Y
+            do i=0,BasisOrder
+                indexrow=1
+                do j=0,BasisOrder
+                    do n=0,i
+                        do m=0,j
+                            if(max(0,m+i-j)<=n.and.n<=min(m,i)) then
+                                BlockTemp(j,i).Matrix(m,n)=cbn(i-n).Array(j-m)*cbn(n).Array(m)*miuq**(i-n-j+m)*miup**(n-m)
+                            else
+                                BlockTemp(j,i).Matrix(m,n)=0d0
+                            end if
+                        end do
+                    end do
+                    Y(indexrow:indexrow+j,index:index+i)=BlockTemp(j,i).Matrix
+                    indexrow=indexrow+j+1
+                end do
+                index=index+i+1
+            end do
+            TAU(1)=1d0!Construct TAU
+            index=2
+            do i=1,BasisOrder
+                do j=0,i
+                    TAU(index)=fct(i-j)*fct(j)*sigmaq**(i-j)*sigmap**j
+                    index=index+1
+                end do
+            end do
+        purity=purity+dot_product(M_purity,matmul(U_Coeff,TAU*matmul(Y,d)))&
+            *sigmaq*sigmap/wigcoeff(k1).sigmaq/wigcoeff(k1).sigmap/wigcoeff(k2).sigmaq/wigcoeff(k2).sigmap&
+            *dSqrt((1d0-cor*cor)/(1d0-wigcoeff(k1).cor*wigcoeff(k1).cor)/(1d0-wigcoeff(k2).cor*wigcoeff(k2).cor))&
+            *dExp(-0.5d0*(dot_product(miuvec,Bk1k2)-Ck(k1)-Ck(k2)))
         do k2=k1+1,NCentre
+            Ak1k2=Ak(:,:,k1)+Ak(:,:,k2)!Compute miuq_k1k2, miup_k1k2, sigmaq_k1k2, sigmap_k1k2, cor_k1k2
+            call My_dpotri(Ak1k2,2)
+            Ak1k2(1,2)=Ak1k2(2,1)
+            Bk1k2=Bk(:,k1)+Bk(:,k2)
+            miuvec=matmul(Ak1k2,Bk1k2)
+            miuq=miuvec(1)
+            miup=miuvec(2)
+            sigmaq=dSqrt(Ak1k2(1,1))
+            sigmap=dSqrt(Ak1k2(2,2))
+            cor=Ak1k2(2,1)/sigmaq/sigmap
+            d=0d0!Construct d_k1k2
+            index=1
+            do i=0,BasisOrder
+                do n=0,i
+                    do j=0,i
+                        do m=max(0,n+j-i),min(n,j)
+                            d(index)=d(index)+a(o2v(i-j,n-m),k1)*a(o2v(j,m),k2)
+                        end do
+                    end do
+                end do
+            end do
+            index=1!Construct Y
+            do i=0,BasisOrder
+                indexrow=1
+                do j=0,BasisOrder
+                    do n=0,i
+                        do m=0,j
+                            if(max(0,m+i-j)<=n.and.n<=min(m,i)) then
+                                BlockTemp(j,i).Matrix(m,n)=cbn(i-n).Array(j-m)*cbn(n).Array(m)*miuq**(i-n-j+m)*miup**(n-m)
+                            else
+                                BlockTemp(j,i).Matrix(m,n)=0d0
+                            end if
+                        end do
+                    end do
+                    Y(indexrow:indexrow+j,index:index+i)=BlockTemp(j,i).Matrix
+                    indexrow=indexrow+j+1
+                end do
+                index=index+i+1
+            end do
+            TAU(1)=1d0!Construct TAU
+            index=2
+            do i=1,BasisOrder
+                do j=0,i
+                    TAU(index)=fct(i-j)*fct(j)*sigmaq**(i-j)*sigmap**j
+                    index=index+1
+                end do
+            end do
+            purity=purity+2d0*dot_product(M_purity,matmul(U_Coeff,TAU*matmul(Y,d)))&
+                *sigmaq*sigmap/wigcoeff(k1).sigmaq/wigcoeff(k1).sigmap/wigcoeff(k2).sigmaq/wigcoeff(k2).sigmap&
+                *dSqrt((1d0-cor*cor)/(1d0-wigcoeff(k1).cor*wigcoeff(k1).cor)/(1d0-wigcoeff(k2).cor*wigcoeff(k2).cor))&
+                *dExp(-0.5d0*(dot_product(miuvec,Bk1k2)-Ck(k1)-Ck(k2)))
         end do
     end do
-    purity=purity/pim2/hbar
+    purity=purity*hbar
 end function purity
 
 real*8 function WignerDistribution(q,p)
@@ -578,5 +721,11 @@ real*8 function WignerDistribution(q,p)
     end do
     WignerDistribution=WignerDistribution/pim2
 end function WignerDistribution
+
+!Return the position of a j-th order m-th momentum term in its vector form
+integer function o2v(j,m)
+    integer,intent(in)::j,m
+    o2v=j*(j+1)/2+m+1
+end function o2v
 
 end module Wigner

@@ -5,6 +5,11 @@ module SMD
     use Wigner
     implicit none
 
+!Derived type
+    type SMD3PArray
+        type(d2PArray),allocatable,dimension(:)::Order
+    end type SMD3PArray
+
 !Parameter
     integer::SMD_FollowStep=1000,&!Every how many steps print propagation
              SMD_OutputOrder=2!Output only 1 to SMD_OutputOrder SMD terms
@@ -21,6 +26,11 @@ module SMD
 contains
 subroutine InitializeSMD()
     integer::i
+    allocate(SMDquantity(SMDEvolutionOrder))
+    do i=1,SMDEvolutionOrder
+        allocate(SMDquantity(i).Array(0:i))
+        SMDquantity(i).Array=0d0
+    end do
     !RK4 for SMD
     allocate(SMD_dtforall(SMDEvolutionOrder))
     allocate(SMD_dtd2(SMDEvolutionOrder))
