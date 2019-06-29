@@ -168,10 +168,8 @@ subroutine CutOffScheme(u)
     !First, use time-dependently evolved SMD quantities to fit a Wigner distribution
     call FitWignerDistribution(u(1:SMDEvolutionOrder))
     !Then compute all terms based on the fitted Wigner distribution
-    q=u(1).Array(0)!Save the old location and width
-    p=u(1).Array(1)
-    sigmaq=u(2).Array(0)
-    sigmap=u(2).Array(2)
+    q=u(1).Array(0); p=u(1).Array(1)!Save the old location and width
+    sigmaq=u(2).Array(0); sigmap=u(2).Array(2)
     call EvaluateSMDQuantity(xi,q,p,sigmaq,sigmap)
     if(dAbs(xi(1)-1d0)>MaxPopDev) then
         write(*,*)'Too large population fluctuation:',xi(1)-1d0
@@ -181,8 +179,7 @@ subroutine CutOffScheme(u)
     u(2).Array(0)=dSqrt(2d0*xi(4)*sigmaq*sigmaq+2d0*q*u(1).Array(0)-q*q-u(1).Array(0)*u(1).Array(0))
     u(2).Array(2)=dSqrt(2d0*xi(6)*sigmap*sigmap+2d0*p*u(1).Array(1)-p*p-u(1).Array(1)*u(1).Array(1))
     !Transform other terms to new location and width
-    SIGMA(1)=1d0!Construct SIGMA and SIGMA^fit
-    SIGMAfit(1)=1d0
+    SIGMA(1)=1d0; SIGMAfit(1)=1d0!Construct SIGMA and SIGMA^fit
     index=2
     do i=1,SMDOrder
         do j=0,i
@@ -191,8 +188,7 @@ subroutine CutOffScheme(u)
             index=index+1
         end do
     end do
-    q=q-u(1).Array(0)!Construct W
-    p=p-u(1).Array(1)
+    q=q-u(1).Array(0); p=p-u(1).Array(1)!Construct W
     index=1
     do i=0,SMDOrder
         indexwrow=1
@@ -234,23 +230,14 @@ subroutine FitWignerDistribution(u)
     real*8,dimension(NSMDQuantityEvolution)::SIGMA,xi
     !Prepare
         NCoefficient=NCentre*(5+NLinearCoeffSC)
-        q=u(1).Array(0)
-        p=u(1).Array(1)
-        sigmaq=u(2).Array(0)
-        sigmap=u(2).Array(2)
-        xi(1)=1d0
-        xi(2)=0d0
-        xi(3)=0d0
-        xi(4)=0.5d0
-        xi(5)=u(2).Array(1)
-        xi(6)=0.5d0
+        q=u(1).Array(0); p=u(1).Array(1); sigmaq=u(2).Array(0); sigmap=u(2).Array(2)
+        xi(1)=1d0; xi(2)=0d0; xi(3)=0d0; xi(4)=0.5d0; xi(5)=u(2).Array(1); xi(6)=0.5d0
         index=7
         do i=3,SMDEvolutionOrder
             xi(index:index+i)=u(i).Array
             index=index+i+1
         end do
-        allocate(c(NCoefficient))
-        call wigcoeff2c(c,NCoefficient)
+        allocate(c(NCoefficient)); call wigcoeff2c(c,NCoefficient)
         SIGMA(1)=1d0!Construct SIGMA
         index=2
         do i=1,SMDEvolutionOrder
@@ -455,10 +442,8 @@ subroutine wigcoeff2c(c,N)!In c, cor_k will be replaced with sin(theta_k) to avo
     integer::k,index,index2
     index=0
     do k=1,NCentre
-        c(index+1)=wigcoeff(k).miuq
-        c(index+2)=wigcoeff(k).miup
-        c(index+3)=wigcoeff(k).sigmaq
-        c(index+4)=wigcoeff(k).sigmap
+        c(index+1)=wigcoeff(k).miuq; c(index+2)=wigcoeff(k).miup
+        c(index+3)=wigcoeff(k).sigmaq; c(index+4)=wigcoeff(k).sigmap
         c(index+5)=dAsin(wigcoeff(k).cor)
         index=index+5
         index2=index+NLinearCoeffSC
@@ -472,10 +457,8 @@ subroutine c2wigcoeff(c,N)
     integer::k,index,index2
     index=0
     do k=1,NCentre
-        wigcoeff(k).miuq=c(index+1)
-        wigcoeff(k).miup=c(index+2)
-        wigcoeff(k).sigmaq=c(index+3)
-        wigcoeff(k).sigmap=c(index+4)
+        wigcoeff(k).miuq=c(index+1); wigcoeff(k).miup=c(index+2)
+        wigcoeff(k).sigmaq=c(index+3); wigcoeff(k).sigmap=c(index+4)
         wigcoeff(k).cor=dSin(c(index+5))
         index=index+5
         index2=index+NLinearCoeffSC
@@ -501,14 +484,10 @@ subroutine EvaluateSMDQuantity(xi,q,p,sigmaq,sigmap)!Evaluate SMD quantity from 
     end do
     xi=0d0!Summation
     do k=1,NCentre
-        miuqk=wigcoeff(k).miuq-q!Prepare
-        miupk=wigcoeff(k).miup-p
-        sigmaqk=wigcoeff(k).sigmaq
-        sigmapk=wigcoeff(k).sigmap
-        sigmaalphak=dSqrt(1d0+wigcoeff(k).cor)
-        sigmabetak= dSqrt(1d0-wigcoeff(k).cor)
-        SIGMAk(1)=1d0!Construct SIGMA_k, SIGMA_k^AlphaBeta
-        SIGMAkAlphaBeta(1)=1d0
+        miuqk=wigcoeff(k).miuq-q; miupk=wigcoeff(k).miup-p!Prepare
+        sigmaqk=wigcoeff(k).sigmaq; sigmapk=wigcoeff(k).sigmap
+        sigmaalphak=dSqrt(1d0+wigcoeff(k).cor); sigmabetak=dSqrt(1d0-wigcoeff(k).cor)
+        SIGMAk(1)=1d0; SIGMAkAlphaBeta(1)=1d0!Construct SIGMA_k, SIGMA_k^AlphaBeta
         index=2
         do i=1,SMDOrder
             do j=0,i
@@ -553,10 +532,8 @@ real*8 function purity()
     real*8,dimension(NLinearCoeffSC,NLinearCoeffSC)::Y
     purity=0d0!Prepare
     do k1=1,NCentre
-        miuq=wigcoeff(k1).miuq
-        miup=wigcoeff(k1).miup
-        sigmaq=wigcoeff(k1).sigmaq
-        sigmap=wigcoeff(k1).sigmap
+        miuq=wigcoeff(k1).miuq; miup=wigcoeff(k1).miup
+        sigmaq=wigcoeff(k1).sigmaq; sigmap=wigcoeff(k1).sigmap
         cor=wigcoeff(k1).cor
         temp=1d0-cor*cor!Construct Ak, Bk, Ck
         sigmaq_2=1d0/sigmaq/sigmaq
@@ -702,13 +679,11 @@ end function purity
 
 real*8 function WignerDistribution(q,p)
     real*8,intent(in)::q,p
-    integer::k,i,n,index
-    real*8::sc,CapQ,CapP,temp
+    integer::k,i,n,index; real*8::sc,CapQ,CapP,temp
     WignerDistribution=0d0
     do k=1,NCentre
         sc=0d0
-        CapQ=(q-wigcoeff(k).miuq)/wigcoeff(k).sigmaq
-        CapP=(p-wigcoeff(k).miup)/wigcoeff(k).sigmap
+        CapQ=(q-wigcoeff(k).miuq)/wigcoeff(k).sigmaq; CapP=(p-wigcoeff(k).miup)/wigcoeff(k).sigmap
         index=1
         do i=0,BasisOrder
             do n=0,i

@@ -4,9 +4,7 @@
 !SMDEvolutionOrder+1 : SMDOrder are predicted based on evolved terms
 !For polynomial potential, SMDOrder = SMDEvolutionOrder + PotentialOrder - 2
 module Basic
-    use General
-    use Mathematics
-    use LinearAlgebra
+    use General; use Mathematics; use LinearAlgebra
     use NonlinearOptimization
     implicit none
 

@@ -29,25 +29,17 @@ subroutine InitializeSMD()
     integer::i
     allocate(SMDquantity(SMDEvolutionOrder))
     do i=1,SMDEvolutionOrder
-        allocate(SMDquantity(i).Array(0:i))
-        SMDquantity(i).Array=0d0
+        allocate(SMDquantity(i).Array(0:i)); SMDquantity(i).Array=0d0
     end do
     !RK4 for SMD
     allocate(SMD_dtforall(SMDEvolutionOrder))
-    allocate(SMD_dtd2(SMDEvolutionOrder))
-    allocate(SMD_dtd6(SMDEvolutionOrder))
-    SMD_dtforall=dt
-    SMD_dtd2=dt/2d0
-    SMD_dtd6=dt/6d0
-    allocate(SMD_k1(SMDEvolutionOrder))
-    allocate(SMD_k2(SMDEvolutionOrder))
-    allocate(SMD_k3(SMDEvolutionOrder))
-    allocate(SMD_k4(SMDEvolutionOrder))
+    allocate(SMD_dtd2(SMDEvolutionOrder)); allocate(SMD_dtd6(SMDEvolutionOrder))
+    SMD_dtforall=dt; SMD_dtd2=dt/2d0; SMD_dtd6=dt/6d0
+    allocate(SMD_k1(SMDEvolutionOrder)); allocate(SMD_k2(SMDEvolutionOrder))
+    allocate(SMD_k3(SMDEvolutionOrder)); allocate(SMD_k4(SMDEvolutionOrder))
     do i=1,SMDEvolutionOrder
-        allocate(SMD_k1(i).Array(0:i))
-        allocate(SMD_k2(i).Array(0:i))
-        allocate(SMD_k3(i).Array(0:i))
-        allocate(SMD_k4(i).Array(0:i))
+        allocate(SMD_k1(i).Array(0:i)); allocate(SMD_k2(i).Array(0:i))
+        allocate(SMD_k3(i).Array(0:i)); allocate(SMD_k4(i).Array(0:i))
     end do
     allocate(SMD_temp(0:SMDOrder))
     do i=0,SMDOrder
@@ -150,14 +142,8 @@ subroutine MoyalEOM(d,u)!Moyal equation of motion
     real*8,dimension(0:ForceOrder)::a
     call CutOffScheme(u)
     call Polynomial(EdV,a,u)!Get V'(Q) - <V'>
-    q=u(1).Array(0)
-    p=u(1).Array(1)
-    sigmaq=u(2).Array(0)
-    covQP =u(2).Array(1)
-    sigmap=u(2).Array(2)
-    varq=sigmaq*sigmaq
-    varp=sigmap*sigmap
-    spdsq=sigmap/sigmaq
+    q=u(1).Array(0); p=u(1).Array(1); sigmaq=u(2).Array(0); covQP=u(2).Array(1); sigmap=u(2).Array(2)
+    varq=sigmaq*sigmaq; varp=sigmap*sigmap; spdsq=sigmap/sigmaq
     !EOM for first 2 order terms
     d(1).Array(0)=u(1).Array(1)/mass
     d(1).Array(1)=-EdV
@@ -168,14 +154,11 @@ subroutine MoyalEOM(d,u)!Moyal equation of motion
         d(2).Array(1)=d(2).Array(1)-a(i)*(i+1)*u(i+1).Array(0)
         d(2).Array(2)=d(2).Array(2)-a(i)*u(i+1).Array(1)
     end do
-    dlnsigmaq=d(2).Array(0)/sigmaq
-    dlnsigmap=d(2).Array(2)/sigmap
+    dlnsigmaq=d(2).Array(0)/sigmaq; dlnsigmap=d(2).Array(2)/sigmap
     d(2).Array(1)=spdsq/mass+d(2).Array(1)/sigmap-(dlnsigmaq+dlnsigmap)*covQP
     !EOM for 3 and higher order terms
-    u(1).Array(0)=0!Transform the first 2 order terms into the uniform form of xi
-    u(1).Array(1)=0
-    u(2).Array(0)=0.5d0
-    u(2).Array(2)=0.5d0
+    u(1).Array(0)=0; u(1).Array(1)=0!Transform the first 2 order terms into the uniform form of xi
+    u(2).Array(0)=0.5d0; u(2).Array(2)=0.5d0
     do order=3,SMDEvolutionOrder
         !<Q^order> does not have 2nd term
         d(order).Array(0)=1d0/mass*spdsq*u(order).Array(1)-order*dlnsigmaq*u(order).Array(0)
@@ -196,8 +179,7 @@ subroutine MoyalEOM(d,u)!Moyal equation of motion
             !4th term: quantum effect
             if(n>2) then
                 quantum=0d0
-                qtemp=varq
-                ptemp=varp
+                qtemp=varq; ptemp=varp
                 do j=1,(n-1)/2
                     s=0d0
                     jm2=j*2
@@ -205,17 +187,14 @@ subroutine MoyalEOM(d,u)!Moyal equation of motion
                         s=s+a(i)*cbn(m+i-jm2).Array(m)*u(m+i-jm2+n-(jm2+1)).Array(n-(jm2+1))
                     end do
                     quantum=quantum+(-1)**(j+1)*(hbar/2d0)**jm2/fct(jm2+1)/qtemp/ptemp*s
-                    qtemp=qtemp*varq
-                    ptemp=ptemp*varp
+                    qtemp=qtemp*varq; ptemp=ptemp*varp
                 end do
                 d(order).Array(n)=d(order).Array(n)+quantum/sigmap
             end if
         end do
     end do
-    u(1).Array(0)=q!Restore the old form of the first 2 order terms
-    u(1).Array(1)=p
-    u(2).Array(0)=sigmaq
-    u(2).Array(2)=sigmap
+    u(1).Array(0)=q; u(1).Array(1)=p!Restore the old form of the first 2 order terms
+    u(2).Array(0)=sigmaq; u(2).Array(2)=sigmap
 end subroutine MoyalEOM
 
 subroutine SMDRK4(old,new,f)!Runge Kutta 4 order, modified for SMD data type
