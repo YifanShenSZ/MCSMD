@@ -12,6 +12,7 @@ module Basic
     real*8::mass,TotalTime,dt,OutputInterval
     integer::SMDEvolutionOrder,BasisOrder,PotentialOrder
     real*8,allocatable,dimension(:)::PolyPotentialCoeff
+    real*8::qleft,qright,dq,pleft,pright,dp
 
 !Global variable
     integer::ForceOrder,SMDOrder,NSMDQuantityEvolution,NSMDQuantity

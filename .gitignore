@@ -5,5 +5,7 @@ x64/
 *.u2d
 *.vfproj
 *.in
-*.SMD
+*.out
 *.txt
+*.gif
+input/

@@ -60,7 +60,7 @@ subroutine Dynamics()
         TrajectoryLength=ceiling(TotalTime/OutputInterval)
         TotalSteps=TrajectoryLength*OutputStep
     !Allocate data storage
-        allocate(trajSMD(0:TrajectoryLength))
+        allocate(trajSMD(0:TrajectoryLength))!SMD
         do j=0,TrajectoryLength
             allocate(trajSMD(j).Order(SMD_OutputOrder))
             do i=1,SMD_OutputOrder
@@ -70,7 +70,14 @@ subroutine Dynamics()
         forall(i=1:SMD_OutputOrder)
             trajSMD(0).Order(i).Array=SMDquantity(i).Array
         end forall
-        allocate(trajpurity(0:TrajectoryLength))
+        allocate(trajwigcoeff(0:TrajectoryLength))!Wigner coefficient
+        trajwigcoeff(0).NCentre=NCentre
+        allocate(trajwigcoeff(0).centre(NCentre))
+        do i=1,NCentre
+            allocate(trajwigcoeff(0).centre(i).b(NLinearCoeffSC))
+        end do
+        trajwigcoeff(0).centre=wigcoeff(1:NCentre)
+        allocate(trajpurity(0:TrajectoryLength))!Purity
         trajpurity(0)=purity()
     allocate(SMDquantityold(0:SMDOrder))!Allocate local work space
     do i=0,SMDOrder
@@ -92,10 +99,16 @@ subroutine Dynamics()
         end if
         if(mod(istep,OutputStep)==0) then!Write trajectory
             j=istep/OutputStep
-            forall(i=1:SMD_OutputOrder)
+            forall(i=1:SMD_OutputOrder)!SMD
                 trajSMD(j).Order(i).Array=SMDquantity(i).Array
             end forall
-            trajpurity(j)=purity()
+            trajwigcoeff(j).NCentre=NCentre!Wigner coefficient
+            allocate(trajwigcoeff(j).centre(NCentre))
+            do i=1,NCentre
+                allocate(trajwigcoeff(j).centre(i).b(NLinearCoeffSC))
+            end do
+            trajwigcoeff(j).centre=wigcoeff(1:NCentre)
+            trajpurity(j)=purity()!Purity
         end if
         do i=1,SMDEvolutionOrder!Check whether overflow
             do j=0,i
@@ -112,12 +125,12 @@ subroutine Dynamics()
             SMDquantityold(i).Array=SMDquantity(i).Array
         end forall
     end do
-    open(unit=99,file='t.SMD',status='replace')!output
+    open(unit=99,file='t.out',status='replace')!output
         do i=0,TrajectoryLength
             write(99,*)dble(i)*OutputInterval
         end do
     close(99)
-    open(unit=99,file='SMD.SMD',status='replace')
+    open(unit=99,file='SMD.out',status='replace')
         do istep=0,TrajectoryLength
             do i=1,SMD_OutputOrder
                 do j=0,i
@@ -126,7 +139,19 @@ subroutine Dynamics()
             end do
         end do
     close(99)
-    open(unit=99,file='purity.SMD',status='replace')
+    open(unit=99,file='WignerCoefficient.out',status='replace')
+        do istep=0,TrajectoryLength
+            write(99,*)trajwigcoeff(istep).NCentre
+            do i=1,trajwigcoeff(istep).NCentre
+                write(99,*)trajwigcoeff(istep).centre(i).miuq,trajwigcoeff(istep).centre(i).miup
+                write(99,*)trajwigcoeff(istep).centre(i).sigmaq,trajwigcoeff(istep).centre(i).cor,trajwigcoeff(istep).centre(i).sigmap
+                do j=1,NLinearCoeffSC
+                    write(99,*)trajwigcoeff(istep).centre(i).b(j)
+                end do
+            end do
+        end do
+    close(99)
+    open(unit=99,file='purity.out',status='replace')
         do i=0,TrajectoryLength
             write(99,*)trajpurity(i)
         end do

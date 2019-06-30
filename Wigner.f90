@@ -10,8 +10,9 @@ module Wigner
         real*8,allocatable,dimension(:)::b
     end type WignerCoefficient
 
-    !Example: trajwigcoeff(i).centre(k) contains the parameter of k-th centre at snap shot i
+    !Example: trajwigcoeff(i).centre(j) contains the parameter of j-th centre at snap shot i
     type WigCoeffTrajectory
+        integer::NCentre
         type(WignerCoefficient),allocatable,dimension(:)::centre
     end type WigCoeffTrajectory
 
@@ -25,6 +26,7 @@ module Wigner
     integer::NCentre
     type(WignerCoefficient),allocatable,dimension(:)::wigcoeff
     real*8::InitialPurity
+    type(WigCoeffTrajectory),allocatable,dimension(:)::trajwigcoeff
 
 !Wigner module only variable
     integer::NLinearCoeffSC!Number of linear coefficients for a single centre
@@ -34,130 +36,7 @@ module Wigner
     type(d2PMatrix),allocatable,dimension(:,:)::BlockTemp!Work space
 
 contains
-subroutine InitializeWigner()
-    integer::i,j,m,n,index,indexmrow
-    real*8::s
-    type(d2PMatrix),allocatable,dimension(:)::Utemp
-    type(d2PMatrix),allocatable,dimension(:,:)::Mtemp
-    NLinearCoeffSC=(1+BasisOrder+1)*(BasisOrder+1)/2
-    !Global variable
-    allocate(wigcoeff(MaxNCentre))
-    do i=1,MaxNCentre
-        allocate(wigcoeff(i).b(NLinearCoeffSC))
-    end do
-    !Work space for evaluating SMD quantity and fitting Wigner distribution
-    !Canonical transformation matrix from (q-miu_q)/sigma_q,(p-miu_p)/sigma_p to alpha,beta
-        allocate(Utemp(2:max(SMDOrder,BasisOrder)))!Prepare
-        do j=2,max(SMDOrder,BasisOrder)
-            allocate(Utemp(j).Matrix(0:j,0:j))
-            do n=0,j
-                do m=0,j
-                    s=0d0
-                    do i=max(0,m+n-j),min(m,n)
-                        s=s+cbn(j-m).Array(n-i)*cbn(m).Array(i)*(-1)**i
-                    end do
-                    Utemp(j).Matrix(m,n)=fct(j-n)*fct(n)/fct(j-m)/fct(m)/(1.4142135623730951d0**j)*s
-                end do
-            end do
-        end do
-        allocate(U_Coeff(NLinearCoeffSC,NLinearCoeffSC))!Transform single centre linear coefficient vector
-            U_Coeff=0d0
-            U_Coeff(1,1)=1d0!0th order
-            if(BasisOrder>0) then
-                U_Coeff(2,2)= 1d0/1.4142135623730951d0!1st order
-                U_Coeff(3,2)= 1d0/1.4142135623730951d0
-                U_Coeff(2,3)= 1d0/1.4142135623730951d0
-                U_Coeff(3,3)=-1d0/1.4142135623730951d0
-                index=4
-                do i=2,BasisOrder
-                    U_Coeff(index:index+i,index:index+i)=Utemp(i).Matrix
-                    index=index+i+1
-                end do
-            end if
-        allocate(U_SMDEvolution(NSMDQuantityEvolution,NSMDQuantityEvolution))!Transform SMD quantities up to SMDEvolutionOrder
-            U_SMDEvolution=0d0
-            U_SMDEvolution(1,1)=1d0!0th order
-            U_SMDEvolution(2,2)= 1d0/1.4142135623730951d0!1st order
-            U_SMDEvolution(3,2)= 1d0/1.4142135623730951d0
-            U_SMDEvolution(2,3)= 1d0/1.4142135623730951d0
-            U_SMDEvolution(3,3)=-1d0/1.4142135623730951d0
-            index=4
-            do i=2,SMDEvolutionOrder
-                U_SMDEvolution(index:index+i,index:index+i)=Utemp(i).Matrix
-                index=index+i+1
-            end do
-        allocate(U_SMD(NSMDQuantity,NSMDQuantity))!Transform SMD quantities
-            U_SMD=0d0
-            U_SMD(1,1)=1d0!0th order
-            U_SMD(2,2)= 1d0/1.4142135623730951d0!1st order
-            U_SMD(3,2)= 1d0/1.4142135623730951d0
-            U_SMD(2,3)= 1d0/1.4142135623730951d0
-            U_SMD(3,3)=-1d0/1.4142135623730951d0
-            index=4
-            do i=2,SMDOrder
-                U_SMD(index:index+i,index:index+i)=Utemp(i).Matrix
-                index=index+i+1
-            end do
-        do i=3,SMDOrder!Clean up
-            deallocate(Utemp(i).Matrix)
-        end do
-        deallocate(Utemp)
-    !Linear mapping matrix from single centre linear coefficient vector to single centre SMD quantity
-        allocate(Mtemp(0:SMDOrder,0:BasisOrder))!Prepare
-        do i=0,BasisOrder
-            do j=0,SMDOrder
-                allocate(Mtemp(j,i).Matrix(0:j,0:i))
-                do n=0,i
-                    do m=0,j
-                        if(mod(j-m+i-n,2)==0.and.mod(m+n,2)==0) then
-                            Mtemp(j,i).Matrix(m,n)=fct2(j-m+i-n-1)*fct2(m+n-1)/fct(j-m)/fct(m)/fct(i-n)/fct(n)
-                        else
-                            Mtemp(j,i).Matrix(m,n)=0d0
-                        end if
-                    end do
-                end do
-            end do
-        end do
-        allocate(M_SMDEvolution(NSMDQuantityEvolution,NLinearCoeffSC))!Map SMD quantities up to SMDEvolutionOrder
-            index=1
-            do i=0,BasisOrder
-                indexmrow=1
-                do j=0,SMDEvolutionOrder
-                    M_SMDEvolution(indexmrow:indexmrow+j,index:index+i)=Mtemp(j,i).Matrix
-                    indexmrow=indexmrow+j+1
-                end do
-                index=index+i+1
-            end do
-        allocate(M_SMD(NSMDQuantity,NLinearCoeffSC))!Map SMD quantities
-            index=1
-            do i=0,BasisOrder
-                indexmrow=1
-                do j=0,SMDOrder
-                    M_SMD(indexmrow:indexmrow+j,index:index+i)=Mtemp(j,i).Matrix
-                    indexmrow=indexmrow+j+1
-                end do
-                index=index+i+1
-            end do
-        allocate(M_purity(NLinearCoeffSC))!Map purity, i.e. only 1st row is required
-            index=1
-            do i=0,BasisOrder
-                M_purity(index:index+i)=Mtemp(0,i).Matrix(0,:)
-                index=index+i+1
-            end do
-        do i=0,BasisOrder!Clean up
-            do j=0,SMDOrder
-                deallocate(Mtemp(j,i).Matrix)
-            end do
-        end do
-        deallocate(Mtemp)
-    allocate(BlockTemp(0:SMDOrder,0:SMDOrder))
-    do i=0,SMDOrder
-        do j=0,SMDOrder
-            allocate(BlockTemp(j,i).Matrix(0:j,0:i))
-        end do
-    end do
-end subroutine InitializeWigner
-
+!---------- These are the only routines to modify while developing ----------
 !Take in the SMD quantities, fill in high order terms
 subroutine CutOffScheme(u)
     type(d2PArray),dimension(0:SMDOrder),intent(inout)::u
@@ -466,6 +345,131 @@ subroutine c2wigcoeff(c,N)
         index=index2
     end do
 end subroutine c2wigcoeff
+!----------------------------------- End ------------------------------------
+
+subroutine InitializeWigner()
+    integer::i,j,m,n,index,indexmrow
+    real*8::s
+    type(d2PMatrix),allocatable,dimension(:)::Utemp
+    type(d2PMatrix),allocatable,dimension(:,:)::Mtemp
+    NLinearCoeffSC=(1+BasisOrder+1)*(BasisOrder+1)/2
+    !Global variable
+    allocate(wigcoeff(MaxNCentre))
+    do i=1,MaxNCentre
+        allocate(wigcoeff(i).b(NLinearCoeffSC))
+    end do
+    !Work space for evaluating SMD quantity and fitting Wigner distribution
+    !Canonical transformation matrix from (q-miu_q)/sigma_q,(p-miu_p)/sigma_p to alpha,beta
+        allocate(Utemp(2:max(SMDOrder,BasisOrder)))!Prepare
+        do j=2,max(SMDOrder,BasisOrder)
+            allocate(Utemp(j).Matrix(0:j,0:j))
+            do n=0,j
+                do m=0,j
+                    s=0d0
+                    do i=max(0,m+n-j),min(m,n)
+                        s=s+cbn(j-m).Array(n-i)*cbn(m).Array(i)*(-1)**i
+                    end do
+                    Utemp(j).Matrix(m,n)=fct(j-n)*fct(n)/fct(j-m)/fct(m)/(1.4142135623730951d0**j)*s
+                end do
+            end do
+        end do
+        allocate(U_Coeff(NLinearCoeffSC,NLinearCoeffSC))!Transform single centre linear coefficient vector
+            U_Coeff=0d0
+            U_Coeff(1,1)=1d0!0th order
+            if(BasisOrder>0) then
+                U_Coeff(2,2)= 1d0/1.4142135623730951d0!1st order
+                U_Coeff(3,2)= 1d0/1.4142135623730951d0
+                U_Coeff(2,3)= 1d0/1.4142135623730951d0
+                U_Coeff(3,3)=-1d0/1.4142135623730951d0
+                index=4
+                do i=2,BasisOrder
+                    U_Coeff(index:index+i,index:index+i)=Utemp(i).Matrix
+                    index=index+i+1
+                end do
+            end if
+        allocate(U_SMDEvolution(NSMDQuantityEvolution,NSMDQuantityEvolution))!Transform SMD quantities up to SMDEvolutionOrder
+            U_SMDEvolution=0d0
+            U_SMDEvolution(1,1)=1d0!0th order
+            U_SMDEvolution(2,2)= 1d0/1.4142135623730951d0!1st order
+            U_SMDEvolution(3,2)= 1d0/1.4142135623730951d0
+            U_SMDEvolution(2,3)= 1d0/1.4142135623730951d0
+            U_SMDEvolution(3,3)=-1d0/1.4142135623730951d0
+            index=4
+            do i=2,SMDEvolutionOrder
+                U_SMDEvolution(index:index+i,index:index+i)=Utemp(i).Matrix
+                index=index+i+1
+            end do
+        allocate(U_SMD(NSMDQuantity,NSMDQuantity))!Transform SMD quantities
+            U_SMD=0d0
+            U_SMD(1,1)=1d0!0th order
+            U_SMD(2,2)= 1d0/1.4142135623730951d0!1st order
+            U_SMD(3,2)= 1d0/1.4142135623730951d0
+            U_SMD(2,3)= 1d0/1.4142135623730951d0
+            U_SMD(3,3)=-1d0/1.4142135623730951d0
+            index=4
+            do i=2,SMDOrder
+                U_SMD(index:index+i,index:index+i)=Utemp(i).Matrix
+                index=index+i+1
+            end do
+        do i=3,SMDOrder!Clean up
+            deallocate(Utemp(i).Matrix)
+        end do
+        deallocate(Utemp)
+    !Linear mapping matrix from single centre linear coefficient vector to single centre SMD quantity
+        allocate(Mtemp(0:SMDOrder,0:BasisOrder))!Prepare
+        do i=0,BasisOrder
+            do j=0,SMDOrder
+                allocate(Mtemp(j,i).Matrix(0:j,0:i))
+                do n=0,i
+                    do m=0,j
+                        if(mod(j-m+i-n,2)==0.and.mod(m+n,2)==0) then
+                            Mtemp(j,i).Matrix(m,n)=fct2(j-m+i-n-1)*fct2(m+n-1)/fct(j-m)/fct(m)/fct(i-n)/fct(n)
+                        else
+                            Mtemp(j,i).Matrix(m,n)=0d0
+                        end if
+                    end do
+                end do
+            end do
+        end do
+        allocate(M_SMDEvolution(NSMDQuantityEvolution,NLinearCoeffSC))!Map SMD quantities up to SMDEvolutionOrder
+            index=1
+            do i=0,BasisOrder
+                indexmrow=1
+                do j=0,SMDEvolutionOrder
+                    M_SMDEvolution(indexmrow:indexmrow+j,index:index+i)=Mtemp(j,i).Matrix
+                    indexmrow=indexmrow+j+1
+                end do
+                index=index+i+1
+            end do
+        allocate(M_SMD(NSMDQuantity,NLinearCoeffSC))!Map SMD quantities
+            index=1
+            do i=0,BasisOrder
+                indexmrow=1
+                do j=0,SMDOrder
+                    M_SMD(indexmrow:indexmrow+j,index:index+i)=Mtemp(j,i).Matrix
+                    indexmrow=indexmrow+j+1
+                end do
+                index=index+i+1
+            end do
+        allocate(M_purity(NLinearCoeffSC))!Map purity, i.e. only 1st row is required
+            index=1
+            do i=0,BasisOrder
+                M_purity(index:index+i)=Mtemp(0,i).Matrix(0,:)
+                index=index+i+1
+            end do
+        do i=0,BasisOrder!Clean up
+            do j=0,SMDOrder
+                deallocate(Mtemp(j,i).Matrix)
+            end do
+        end do
+        deallocate(Mtemp)
+    allocate(BlockTemp(0:SMDOrder,0:SMDOrder))
+    do i=0,SMDOrder
+        do j=0,SMDOrder
+            allocate(BlockTemp(j,i).Matrix(0:j,0:i))
+        end do
+    end do
+end subroutine InitializeWigner
 
 subroutine EvaluateSMDQuantity(xi,q,p,sigmaq,sigmap)!Evaluate SMD quantity from global variable wigcoeff
     real*8,dimension(NSMDQuantity),intent(out)::xi
@@ -677,8 +681,67 @@ real*8 function purity()
     purity=purity*hbar
 end function purity
 
-real*8 function WignerDistribution(q,p)
+!Return the position of a j-th order m-th momentum term in its vector form
+integer function o2v(j,m)
+    integer,intent(in)::j,m
+    o2v=j*(j+1)/2+m+1
+end function o2v
+
+subroutine WignerDistributionPlot()
+    integer::lq,lp,i,j,k
+    real*8,allocatable,dimension(:)::q,p
+    real*8,allocatable,dimension(:,:,:)::rho
+    real*8::dbletemp
+    !Initialize mesh grid
+        dbletemp=(qright-qleft)/dq
+        if(dble(int(dbletemp))==dbletemp) then
+            lq=int(dbletemp)+1
+        else
+            lq=ceiling(dbletemp)
+        end if
+        allocate(q(lq))
+        forall(i=1:lq)
+            q(i)=dble(i-1)*dq+qleft
+        end forall
+        dbletemp=(pright-pleft)/dp
+        if(dble(int(dbletemp))==dbletemp) then
+            lp=int(dbletemp)+1
+        else
+            lp=ceiling(dbletemp)
+        end if
+        allocate(p(lp))
+        forall(i=1:lp)
+            p(i)=dble(i-1)*dp+pleft
+        end forall
+    allocate(rho(lq,lp,size(trajwigcoeff)))
+    do i=1,size(trajwigcoeff)
+        do j=1,lp
+            do k=1,lq
+                rho(k,j,i)=WignerDistribution(q(k),p(j),trajwigcoeff(i).centre,trajwigcoeff(i).NCentre)
+            end do
+        end do
+    end do
+    open(unit=99,file='Wigner_q.out',status='replace')!Output
+        do i=1,lq; write(99,*)q(i); end do
+    close(99)
+    open(unit=99,file='Wigner_p.out',status='replace')
+        do i=1,lp; write(99,*)p(i); end do
+    close(99)
+    open(unit=99,file='Wigner.out',status='replace')
+        do i=1,size(trajwigcoeff)
+            do j=1,lp
+                do k=1,lq
+                    write(99,*)rho(k,j,i)
+                end do
+            end do
+        end do
+    close(99)
+end subroutine WignerDistributionPlot
+
+real*8 function WignerDistribution(q,p,wigcoeff,NCentre)
     real*8,intent(in)::q,p
+    integer,intent(in)::NCentre
+    type(WignerCoefficient),dimension(NCentre)::wigcoeff
     integer::k,i,n,index; real*8::sc,CapQ,CapP,temp
     WignerDistribution=0d0
     do k=1,NCentre
@@ -698,11 +761,5 @@ real*8 function WignerDistribution(q,p)
     end do
     WignerDistribution=WignerDistribution/pim2
 end function WignerDistribution
-
-!Return the position of a j-th order m-th momentum term in its vector form
-integer function o2v(j,m)
-    integer,intent(in)::j,m
-    o2v=j*(j+1)/2+m+1
-end function o2v
 
 end module Wigner
