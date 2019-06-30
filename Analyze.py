@@ -2,10 +2,7 @@
 SMDOutputOrder=2
 
 ''' Import library '''
-import sys# Standard library
-import numpy
-import matplotlib.pyplot as plt
-import matplotlib.animation as anm
+import sys; import numpy
 #sys.path.append('/home-4/yshen57@jhu.edu/Library/Python-Library')# My library path on MARCC
 #sys.path.append('C:\\Python-Library')# My library path on my Lenovo-E540
 sys.path.append('C:\\Users\\56402\\OneDrive\\Research\\Source\\Python')# My library path on my surface pro
@@ -42,7 +39,7 @@ def Get_Wigner(source,lq,lp,lt):
 
 ''' Do the job '''
 jobtype=Get_input('SMD.in')
-if(jobtype=='SMD'):
+if(jobtype=='SMD'):# Reformat output and plot
     t=General.Get_Array('t.out')
     SMD=Get_SMD('SMD.out',t.shape[0])
     with open('SMD.txt','w') as f:
@@ -57,7 +54,7 @@ if(jobtype=='SMD'):
                 print(SMD[j,i],end='\t',file=f)
             print(file=f)
     Visualization.Plot2D(t,SMD[0,:],title='<q>-t')
-elif(jobtype=='Wigner'):
+elif(jobtype=='Wigner'):# Animate Wigner distribution
     q=General.Get_Array('Wigner_q.out'); p=General.Get_Array('Wigner_p.out'); t=General.Get_Array('t.out')
     wigner=Get_Wigner('Wigner.out',q.shape[0],p.shape[0],t.shape[0])
     [qtemp,ptemp]=numpy.meshgrid(q,p); Qtemp=qtemp.ravel(); Ptemp=ptemp.ravel()
