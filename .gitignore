@@ -1,11 +1,40 @@
-MCSMD.exe
+# Prerequisites
+*.d
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Fortran module files
 *.mod
-My Advisor Results - v0/
-x64/
-*.u2d
-*.vfproj
-*.in
+*.smod
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Python cache
+__pycache__/
+
+# Executables
+build/
+*.exe
 *.out
-*.txt
-*.gif
-input/
+*.app
+
+# Test and back up
+test/
+BAK/

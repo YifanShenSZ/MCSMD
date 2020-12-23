@@ -4,27 +4,24 @@ program Main
     use SMD
     implicit none
     !Main only accessed input variable
-        character*32::JobType
-        real*8::q0,p0,sigmaq
-!---------- Initialize ----------
-    call ShowTime(); call ReadInput(); call Initialize()
-!------------- End --------------
+    character*32::JobType
+    real*8::q0,p0,sigmaq
 
-!----------- Run job ------------
+    call ShowTime()
+    call ReadInput()
+    call Initialize()
+
     select case(JobType)
-        case('SMD')
-            call Dynamics()
-        case('Wigner')
-            call WignerDistributionPlot()
-        case default!Throw a warning
-            write(*,*)'Program abort: unsupported job type '//trim(adjustl(JobType))
-            stop
+    case("SMD")
+        call Dynamics()
+    case("Wigner")
+        call WignerDistributionPlot()
+    case default
+        stop "Unknown job type"
     end select
-!------------- End --------------
 
-!---------- Clean up ------------
-    call ShowTime(); write(*,*)'Mission complete'
-!------------- End --------------
+    call ShowTime()
+    write(*,*)"Mission success"
 
 contains
 subroutine ReadInput()
