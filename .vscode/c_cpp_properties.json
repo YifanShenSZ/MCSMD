@@ -4,7 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "~/Software/Programming/libtorch-cuda10.1-1.7.1/include/**",
-                "libWigner",
+                "~/Library/Cpp-Library/include",
+                "~/Library/Torch-Chemistry/include",
                 "include"
             ],
             "cppStandard": "c++14"
