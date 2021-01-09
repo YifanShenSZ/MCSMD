@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
-project(MCSMD)
+project(MC)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -13,10 +13,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 include_directories(~/Library/Cpp-Library/include)
 link_directories(~/Library/Cpp-Library/lib)
 
+# Torch-Chemistry
+include_directories(~/Library/Torch-Chemistry/include)
+link_directories(~/Library/Torch-Chemistry/lib)
+
 include_directories(include)
-add_executable(SMD2.exe
+add_executable(MC.exe
+    source/PES.cpp
+    source/basic.cpp
+    source/PESintegral.cpp
+    source/EOM.cpp
     source/main.cpp
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -qopenmp -parallel -ipo -static-intel")
-target_link_libraries(SMD2.exe CL "${TORCH_LIBRARIES}")
+target_link_libraries(MC.exe tchem CL "${TORCH_LIBRARIES}")
