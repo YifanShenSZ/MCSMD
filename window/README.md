@@ -1,4 +1,6 @@
-# A minimal test on windowed SMD2
-Throw out all hbar terms from the original Moyal equation of motion
+# A minimal debug test on windowed SMD
+Flat surface
 
-Use only 1 window
+Only 1 window
+
+No window update, just compare windowed expectations with the prediction given by phase space distribution

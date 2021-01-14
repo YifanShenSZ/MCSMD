@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
-project(window)
+project(branch)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -18,7 +18,7 @@ include_directories(~/Library/Torch-Chemistry/include)
 link_directories(~/Library/Torch-Chemistry/lib)
 
 include_directories(include)
-add_executable(window.exe
+add_executable(branch.exe
     source/PES.cpp
     source/basic.cpp
     source/PESintegral.cpp
@@ -28,4 +28,4 @@ add_executable(window.exe
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -qopenmp -parallel -ipo -static-intel")
-target_link_libraries(window.exe tchem CL "${TORCH_LIBRARIES}")
+target_link_libraries(branch.exe tchem CL "${TORCH_LIBRARIES}")
