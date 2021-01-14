@@ -1,4 +1,4 @@
-# A minimal debug test on windowed SMD
+# 3rd test: a minimal debug test on windowed SMD
 Flat surface
 
 Only 1 window
