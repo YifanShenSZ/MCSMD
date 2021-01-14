@@ -5,9 +5,8 @@
 
 #include "../include/basic.hpp"
 
-// For now this is only for prediction:
-// based on current expectations,
-// fit a gaussian phase space distribution based on current expectations,
+// Based on current expectations,
+// fit a gaussian phase space distribution,
 // then predict windowed expectations
 std::vector<at::Tensor>  update_windows(
 const std::vector<at::Tensor> & expectations,
