@@ -5,10 +5,9 @@
 
 #include "../include/basic.hpp"
 
-// Based on current expectations,
-// fit a gaussian phase space distribution,
-// then predict windowed expectations
-std::vector<at::Tensor>  update_windows(
+// Fit a gaussian phase space distribution based on current expectations
+// In this version we only compute the predictions to compare with the windowed expectations
+std::vector<at::Tensor> update_windows(
 const std::vector<at::Tensor> & expectations,
 const tchem::gaussian::Gaussian & window) {
     // Fit a distribution from expectations

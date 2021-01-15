@@ -22,6 +22,7 @@ add_executable(branch.exe
     source/PES.cpp
     source/basic.cpp
     source/PESintegral.cpp
+    source/expectation.cpp
     source/window.cpp
     source/EOM.cpp
     source/main.cpp

@@ -6,15 +6,16 @@
 #include <tchem/gaussian.hpp>
 
 #include "../include/basic.hpp"
+#include "../include/expectation.hpp"
 
 void update_expectations(
-std::vector<at::Tensor> & expectations,
-const tchem::gaussian::Gaussian & window,
-std::vector<at::Tensor> & windowed_expectations, const double & dt);
+ExpectationSet & expectation_set,
+WindowedSet & windowed_set,
+const double & dt);
 
-std::vector<at::Tensor>  update_windows(
-const std::vector<at::Tensor> & expectations,
-const tchem::gaussian::Gaussian & window);
+void update_windows(
+ExpectationSet & expectation_set,
+WindowedSet & windowed_set);
 
 argparse::ArgumentParser parse_args(const int & argc, const char ** & argv) {
     CL::utility::EchoCommand(argc, argv); std::cout << '\n';
@@ -52,6 +53,7 @@ int main(int argc, const char** argv) {
     expectations[1].copy_(miu);
     expectations[2] = var.new_empty(var.sizes());
     expectations[2].copy_(var + miu.outer(miu));
+    ExpectationSet expectation_set(expectations);
 
     tchem::gaussian::Gaussian distribution(miu, var);
     tchem::gaussian::Gaussian window      (miu, var);
@@ -64,6 +66,8 @@ int main(int argc, const char** argv) {
     windowed_expectations[0] = windowed_expectations[0][0];
     // 1 is a vector, so no need to transform to scalor nor tensor
     windowed_expectations[2] = tchem::LA::vec2sytensor(windowed_expectations[2], 2, 2 * dimension);
+    WindowedSet windowed_set(windowed_expectations, window);
+    std::vector<WindowedSet> windowed_sets = {windowed_set};
 
     double total_time = 10000.0;
     if (args.gotArgument("total_time")) total_time = args.retrieve<double>("total_time");
@@ -74,72 +78,51 @@ int main(int argc, const char** argv) {
 
     std::ofstream ofs0; ofs0.open("SMD.txt");
     std::ofstream ofs1; ofs1.open("window.txt");
-    std::ofstream ofs2; ofs2.open("prediction.txt");
     size_t NSnapshots = total_time / time_step;
     size_t OutputStep = output_interval / time_step;
     double time = 0.0;
     // Output initial expectations
-    double miu_q = expectations[1][0].item<double>(),
-           miu_p = expectations[1][1].item<double>();
-    double sigmaq = sqrt(expectations[2][0][0].item<double>() - miu_q * miu_q),
-           sigmap = sqrt(expectations[2][1][1].item<double>() - miu_p * miu_p);
-    double rho = (expectations[2][0][1].item<double>() - miu_q * miu_p) / sigmaq / sigmap;
+    double miu_q = expectation_set[1][0].item<double>(),
+           miu_p = expectation_set[1][1].item<double>();
+    double sigmaq = sqrt(expectation_set[2][0][0].item<double>() - miu_q * miu_q),
+           sigmap = sqrt(expectation_set[2][1][1].item<double>() - miu_p * miu_p);
+    double rho = (expectation_set[2][0][1].item<double>() - miu_q * miu_p) / sigmaq / sigmap;
     ofs0 << "time    <q>    <p>    sigma_x    rho    sigma_p\n"
          << time << "    " << miu_q << "    " << miu_p << "    "
          << sigmaq << "    " << rho << "    " << sigmap << std::endl;
     // Output initial windowed expectations
-    double population = windowed_expectations[0].item<double>();
-    miu_q = windowed_expectations[1][0].item<double>() / population;
-    miu_p = windowed_expectations[1][1].item<double>() / population;
-    sigmaq = sqrt(windowed_expectations[2][0][0].item<double>() / population - miu_q * miu_q);
-    sigmap = sqrt(windowed_expectations[2][1][1].item<double>() / population - miu_p * miu_p);
-    rho = (windowed_expectations[2][0][1].item<double>() / population  - miu_q * miu_p) / sigmaq / sigmap;
+    double population = windowed_set[0].item<double>();
+    miu_q = windowed_set[1][0].item<double>() / population;
+    miu_p = windowed_set[1][1].item<double>() / population;
+    sigmaq = sqrt(windowed_set[2][0][0].item<double>() / population - miu_q * miu_q);
+    sigmap = sqrt(windowed_set[2][1][1].item<double>() / population - miu_p * miu_p);
+    rho = (windowed_set[2][0][1].item<double>() / population  - miu_q * miu_p) / sigmaq / sigmap;
     ofs1 << "time    population    <q>    <p>    sigma_x    rho    sigma_p\n"
          << time << "    " << population << "    " << miu_q << "    " << miu_p << "    "
          << sigmaq << "    " << rho << "    " << sigmap << std::endl;
-    // Output initial predictions
-    std::vector<at::Tensor> predictions = update_windows(expectations, window);
-    population = predictions[0].item<double>();
-    miu_q = predictions[1][0].item<double>() / population;
-    miu_p = predictions[1][1].item<double>() / population;
-    sigmaq = sqrt(predictions[2][0][0].item<double>() / population - miu_q * miu_q);
-    sigmap = sqrt(predictions[2][1][1].item<double>() / population - miu_p * miu_p);
-    rho = (predictions[2][0][1].item<double>() / population  - miu_q * miu_p) / sigmaq / sigmap;
-    ofs2 << "time    population    <q>    <p>    sigma_x    rho    sigma_p\n"
-         << time << "    " << population << "    " << miu_q << "    " << miu_p << "    "
-         << sigmaq << "    " << rho << "    " << sigmap << std::endl;
     for (size_t i = 1; i <= NSnapshots; i++) {
-        update_expectations(expectations, window, windowed_expectations, time_step);
+        update_expectations(expectation_set, windowed_set, time_step);
+        update_windows(expectation_set, windowed_set);
         time += time_step;
         if (i % OutputStep == 0) {
-            // Output expectations
-            double miu_q = expectations[1][0].item<double>(),
-                   miu_p = expectations[1][1].item<double>();
-            double sigmaq = sqrt(expectations[2][0][0].item<double>() - miu_q * miu_q),
-                   sigmap = sqrt(expectations[2][1][1].item<double>() - miu_p * miu_p);
-            double rho = (expectations[2][0][1].item<double>() - miu_q * miu_p) / sigmaq / sigmap;
+            // Output expectation_set
+            double miu_q = expectation_set[1][0].item<double>(),
+                   miu_p = expectation_set[1][1].item<double>();
+            double sigmaq = sqrt(expectation_set[2][0][0].item<double>() - miu_q * miu_q),
+                   sigmap = sqrt(expectation_set[2][1][1].item<double>() - miu_p * miu_p);
+            double rho = (expectation_set[2][0][1].item<double>() - miu_q * miu_p) / sigmaq / sigmap;
             ofs0 << time << "    " << miu_q << "    " << miu_p << "    "
                  << sigmaq << "    " << rho << "    " << sigmap << std::endl;
             // Output windowed expectations
-            double population = windowed_expectations[0].item<double>();
-            miu_q = windowed_expectations[1][0].item<double>() / population;
-            miu_p = windowed_expectations[1][1].item<double>() / population;
-            sigmaq = sqrt(windowed_expectations[2][0][0].item<double>() / population - miu_q * miu_q);
-            sigmap = sqrt(windowed_expectations[2][1][1].item<double>() / population - miu_p * miu_p);
-            rho = (windowed_expectations[2][0][1].item<double>() / population  - miu_q * miu_p) / sigmaq / sigmap;
+            double population = windowed_set[0].item<double>();
+            miu_q = windowed_set[1][0].item<double>() / population;
+            miu_p = windowed_set[1][1].item<double>() / population;
+            sigmaq = sqrt(windowed_set[2][0][0].item<double>() / population - miu_q * miu_q);
+            sigmap = sqrt(windowed_set[2][1][1].item<double>() / population - miu_p * miu_p);
+            rho = (windowed_set[2][0][1].item<double>() / population  - miu_q * miu_p) / sigmaq / sigmap;
             ofs1 << time << "    " << population << "    " << miu_q << "    " << miu_p << "    "
-                 << sigmaq << "    " << rho << "    " << sigmap << std::endl;
-            // Output predictions
-            std::vector<at::Tensor> predictions = update_windows(expectations, window);
-            population = predictions[0].item<double>();
-            miu_q = predictions[1][0].item<double>() / population;
-            miu_p = predictions[1][1].item<double>() / population;
-            sigmaq = sqrt(predictions[2][0][0].item<double>() / population - miu_q * miu_q);
-            sigmap = sqrt(predictions[2][1][1].item<double>() / population - miu_p * miu_p);
-            rho = (predictions[2][0][1].item<double>() / population  - miu_q * miu_p) / sigmaq / sigmap;
-            ofs2 << time << "    " << population << "    " << miu_q << "    " << miu_p << "    "
                  << sigmaq << "    " << rho << "    " << sigmap << std::endl;
         }
     }
-    ofs0.close(); ofs1.close(); ofs2.close();
+    ofs0.close(); ofs1.close();
 }

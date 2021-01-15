@@ -4,6 +4,7 @@
 #include <tchem/gaussian.hpp>
 
 #include "../include/basic.hpp"
+#include "../include/expectation.hpp"
 
 // Fit a gaussian phase space distribution based on current expectations
 // If the current window is too far away from the distribution,
@@ -14,14 +15,13 @@
 //     some other coefficient * a gaussian coefficient * a gaussian function
 //     so if the exponent of that gaussian coefficient > n^2, means it exceeds n sigma
 void update_windows(
-const std::vector<at::Tensor> & expectations,
-std::vector<at::Tensor> & windowed_expectations,
-tchem::gaussian::Gaussian & window) {
+ExpectationSet & expectation_set,
+WindowedSet & windowed_set) {
     // Fit a distribution from expectations
-    tchem::gaussian::Gaussian distribution(expectations[1], expectations[2] - expectations[1].outer(expectations[1]));
+    tchem::gaussian::Gaussian distribution(expectation_set[1], expectation_set[2] - expectation_set[1].outer(expectation_set[1]));
     // Compute the distance
-    at::Tensor miu1 = distribution.miu(), var1 = distribution.var(),
-               miu2 = window      .miu(), var2 = window      .var();
+    at::Tensor miu1 = distribution.miu(), miu2 = windowed_set.window().miu(),
+               var1 = distribution.var(), var2 = windowed_set.window().var();
     at::Tensor cholesky_var1 = var1.cholesky(true),
                cholesky_var2 = var2.cholesky(true);
     at::Tensor inv_var1 = at::cholesky_inverse(cholesky_var1, true),
@@ -35,15 +35,16 @@ tchem::gaussian::Gaussian & window) {
 
     // Move the window if too far away
     if (distance > 1.0) {
-        window = distribution;
+        tchem::gaussian::Gaussian window = distribution.clone();
         at::Tensor coeff;
         tchem::gaussian::Gaussian product;
         std::tie(coeff, product) = distribution * window;
         tchem::polynomial::PolynomialSet variable_set(2 * dimension, 2);
         at::Tensor integrals = coeff * product.integral(variable_set);
-        windowed_expectations = variable_set.views(integrals);
-        windowed_expectations[0] = windowed_expectations[0][0];
+        std::vector<at::Tensor> expectations = variable_set.views(integrals);
+        expectations[0] = expectations[0][0];
         // 1 is a vector, so no need to transform to scalor nor tensor
-        windowed_expectations[2] = tchem::LA::vec2sytensor(windowed_expectations[2], 2, 2 * dimension);
+        expectations[2] = tchem::LA::vec2sytensor(expectations[2], 2, 2 * dimension);
+        windowed_set = WindowedSet(expectations, window);
     }
 }

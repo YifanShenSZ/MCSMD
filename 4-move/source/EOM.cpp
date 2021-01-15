@@ -4,14 +4,16 @@
 #include <tchem/gaussian.hpp>
 
 #include "../include/basic.hpp"
+#include "../include/expectation.hpp"
 
 // Return <▽V>, <q▽V>, <p▽V>
 std::tuple<at::Tensor, at::Tensor, at::Tensor> compute_dV_2expectations(tchem::gaussian::Gaussian & gaussian);
 
 // Based on current expectations,
 // fit a gaussian phase space distribution to compute gradient
-std::vector<at::Tensor> compute_gradients(const std::vector<at::Tensor> & expectations) {
-    std::vector<at::Tensor> gradients(3);
+ExpectationSet compute_gradients(const ExpectationSet & expectation_set) {
+    std::vector<at::Tensor> gradients(3),
+                            expectations = expectation_set.expectations();
     gradients[1] = expectations[1].new_empty(expectations[1].sizes());
     gradients[2] = expectations[2].new_empty(expectations[2].sizes());
     // Creat views according to the form in Moyal equation of motion
@@ -26,17 +28,17 @@ std::vector<at::Tensor> compute_gradients(const std::vector<at::Tensor> & expect
               dqp = gradients   [2].slice(0, 0, dimension).slice(1, dimension),
               dpp = gradients   [2].slice(0, dimension).slice(1, dimension);
     // Fit a distribution from expectations
-    tchem::gaussian::Gaussian g(expectations[1], expectations[2] - expectations[1].outer(expectations[1]));
+    tchem::gaussian::Gaussian distribution(expectations[1], expectations[2] - expectations[1].outer(expectations[1]));
     // Get ▽V related integrals
     at::Tensor dV, qdV, pdV;
-    std::tie(dV, qdV, pdV) = compute_dV_2expectations(g);
+    std::tie(dV, qdV, pdV) = compute_dV_2expectations(distribution);
     // Compute gradient from Moyal equation of motion
     dq .copy_(p / mass                        );
     dp .copy_(-dV                             );
     dqq.copy_((qp + qp.transpose(0, 1)) / mass);
     dqp.copy_(pp / mass - qdV                 );
     dpp.copy_(-(pdV + pdV.transpose(0, 1))    );
-    return gradients;
+    return ExpectationSet(gradients);
 }
 
 // Return <▽V>, <q▽V>, <p▽V>,
@@ -49,35 +51,35 @@ compute_dV_4expectations(tchem::gaussian::Gaussian & gaussian);
 
 // Based on current expectations,
 // fit a gaussian phase space distribution to compute gradient
-std::vector<at::Tensor> compute_windowed_gradients(
-const std::vector<at::Tensor> & expectations,
-const tchem::gaussian::Gaussian & window,
-const std::vector<at::Tensor> & windowed_expectations) {
-    std::vector<at::Tensor> windowed_gradients(3);
-    // windowed_gradients[0] will be created as the output of an expression
-    windowed_gradients[1] = windowed_expectations[1].new_empty(windowed_expectations[1].sizes());
-    windowed_gradients[2] = windowed_expectations[2].new_empty(windowed_expectations[2].sizes());
+ExpectationSet compute_windowed_gradients(
+const ExpectationSet & expectation_set,
+const WindowedSet & windowed_set) {
+    std::vector<at::Tensor> gradients(3),
+                            expectations = windowed_set.expectations();
+    // gradients[0] will be created as the output of an expression
+    gradients[1] = expectations[1].new_empty(expectations[1].sizes());
+    gradients[2] = expectations[2].new_empty(expectations[2].sizes());
     // Creat views according to the form in Moyal equation of motion
-    at::Tensor wq  = windowed_expectations[1].slice(0, 0, dimension),
-               wp  = windowed_expectations[1].slice(0, dimension),
-               wqq = windowed_expectations[2].slice(0, 0, dimension).slice(1, 0, dimension),
-               wqp = windowed_expectations[2].slice(0, 0, dimension).slice(1, dimension),
+    at::Tensor wq  = expectations[1].slice(0, 0, dimension),
+               wp  = expectations[1].slice(0, dimension),
+               wqq = expectations[2].slice(0, 0, dimension).slice(1, 0, dimension),
+               wqp = expectations[2].slice(0, 0, dimension).slice(1, dimension),
                // wpp is special since it will perform matrix multiplication
-              dwq  = windowed_gradients   [1].slice(0, 0, dimension),
-              dwp  = windowed_gradients   [1].slice(0, dimension),
-              dwqq = windowed_gradients   [2].slice(0, 0, dimension).slice(1, 0, dimension),
-              dwqp = windowed_gradients   [2].slice(0, 0, dimension).slice(1, dimension),
-              dwpp = windowed_gradients   [2].slice(0, dimension)   .slice(1, dimension);
+              dwq  = gradients   [1].slice(0, 0, dimension),
+              dwp  = gradients   [1].slice(0, dimension),
+              dwqq = gradients   [2].slice(0, 0, dimension).slice(1, 0, dimension),
+              dwqp = gradients   [2].slice(0, 0, dimension).slice(1, dimension),
+              dwpp = gradients   [2].slice(0, dimension)   .slice(1, dimension);
     at::Tensor wpp = wqq.new_empty(wqq.sizes());
-    wpp.copy_(windowed_expectations[2].slice(0, dimension).slice(1, dimension));
+    wpp.copy_(expectations[2].slice(0, dimension).slice(1, dimension));
     for (size_t i = 0    ; i < dimension; i++)
     for (size_t j = i + 1; j < dimension; j++) wpp[j][i] = wpp[i][j];
     // Fit a distribution from expectations
-    tchem::gaussian::Gaussian g(expectations[1], expectations[2] - expectations[1].outer(expectations[1]));
+    tchem::gaussian::Gaussian distribution(expectation_set[1], expectation_set[2] - expectation_set[1].outer(expectation_set[1]));
     // Get the product between distribution and window
     at::Tensor coeff;
     tchem::gaussian::Gaussian product;
-    std::tie(coeff, product) = g * window;
+    std::tie(coeff, product) = distribution * windowed_set.window();
     // Get higher order windowed expectations
     tchem::polynomial::PolynomialSet variable_set(2 * dimension, 4);
     at::Tensor integrals = coeff * product.integral(variable_set);
@@ -111,7 +113,7 @@ const std::vector<at::Tensor> & windowed_expectations) {
     wqppdV *= coeff;
     wpppdV *= coeff;
     // Prepare terms required in differentiating the window
-    at::Tensor miu = window.miu(), var = window.var();
+    at::Tensor miu = windowed_set.window().miu(), var = windowed_set.window().var();
     at::Tensor varcholesky = var.cholesky(true);
     at::Tensor varinv = at::cholesky_inverse(varcholesky, true);
     at::Tensor varinv_qq = varinv.slice(0, 0, dimension).slice(1, 0, dimension),
@@ -122,7 +124,7 @@ const std::vector<at::Tensor> & windowed_expectations) {
     at::Tensor varinv_miu_q = varinv_miu.slice(0, 0, dimension),
                varinv_miu_p = varinv_miu.slice(0, dimension);
     // Compute gradient from Moyal equation of motion with window
-    windowed_gradients[0] = (varinv_miu_q.dot(wp ) - at::trace(varinv_qq.mm(wqp )) - at::trace(varinv_qp.mm(wpp ))) / mass       
+    gradients[0] = (varinv_miu_q.dot(wp ) - at::trace(varinv_qq.mm(wqp )) - at::trace(varinv_qp.mm(wpp ))) / mass       
                           - (varinv_miu_p.dot(wdV) - at::trace(varinv_pq.mm(wqdV)) - at::trace(varinv_pp.mm(wpdV)));
     // dwq
     at::Tensor sumvec1 = dwq.new_zeros(dwq.sizes()),
@@ -264,49 +266,36 @@ const std::vector<at::Tensor> & windowed_expectations) {
     dwpp.copy_(-(wpdV + wpdV.transpose(0, 1))
              + (summat11 - summat12) / mass
              - (summat21 - summat22));
-    return windowed_gradients;
+    return ExpectationSet(gradients);
 }
 
 // Update expectations with RK4
 void update_expectations(
-std::vector<at::Tensor> & expectations,
-std::vector<at::Tensor> & windowed_expectations,
-const tchem::gaussian::Gaussian & window,
+ExpectationSet & expectation_set,
+WindowedSet & windowed_set,
 const double & dt) {
     double dtd2 = dt / 2.0, dtd6 = dt / 6.0;
-    std::vector<at::Tensor> intermediates(expectations.size()),
-                            windowed_intermediates(windowed_expectations.size());
+    ExpectationSet intermediate;
+    WindowedSet windowed_intermediate;
     // gradient 1
-    std::vector<at::Tensor> gradients1 = compute_gradients(expectations),
-                            windowed_gradients1 = compute_windowed_gradients(expectations, window, windowed_expectations);
+    ExpectationSet gradient1 = compute_gradients(expectation_set),
+                   windowed_gradient1 = compute_windowed_gradients(expectation_set, windowed_set);
     // gradient 2
-    windowed_intermediates[0] = windowed_expectations[0] + dtd2 * windowed_gradients1[0];
-    for (size_t i = 1; i < expectations.size(); i++) {
-                 intermediates[i] =          expectations[i] + dtd2 *          gradients1[i];
-        windowed_intermediates[i] = windowed_expectations[i] + dtd2 * windowed_gradients1[i];
-    }
-    std::vector<at::Tensor> gradients2 = compute_gradients(intermediates),
-                            windowed_gradients2 = compute_windowed_gradients(intermediates, window, windowed_intermediates);
+    intermediate = expectation_set + gradient1 * dtd2;
+    windowed_intermediate = windowed_set + windowed_gradient1 * dtd2;
+    ExpectationSet gradient2 = compute_gradients(intermediate),
+                   windowed_gradient2 = compute_windowed_gradients(intermediate, windowed_intermediate);
     // gradient 3
-    windowed_intermediates[0] = windowed_expectations[0] + dtd2 * windowed_gradients2[0];
-    for (size_t i = 1; i < expectations.size(); i++) {
-                 intermediates[i] =          expectations[i] + dtd2 *          gradients2[i];
-        windowed_intermediates[i] = windowed_expectations[i] + dtd2 * windowed_gradients2[i];
-    }
-    std::vector<at::Tensor> gradients3 = compute_gradients(intermediates),
-                            windowed_gradients3 = compute_windowed_gradients(intermediates, window, windowed_intermediates);
+    intermediate = expectation_set + gradient2 * dtd2;
+    windowed_intermediate = windowed_set + windowed_gradient2 * dtd2;
+    ExpectationSet gradient3 = compute_gradients(intermediate),
+                   windowed_gradient3 = compute_windowed_gradients(intermediate, windowed_intermediate);
     // gradient 4
-    windowed_intermediates[0] = windowed_expectations[0] + dt * windowed_gradients3[0];
-    for (size_t i = 1; i < expectations.size(); i++) {
-                 intermediates[i] =          expectations[i] + dt *          gradients3[i];
-        windowed_intermediates[i] = windowed_expectations[i] + dt * windowed_gradients3[i];
-    }
-    std::vector<at::Tensor> gradients4 = compute_gradients(intermediates),
-                            windowed_gradients4 = compute_windowed_gradients(intermediates, window, windowed_intermediates);
+    intermediate = expectation_set + gradient3 * dt;
+    windowed_intermediate = windowed_set + windowed_gradient3 * dt;
+    ExpectationSet gradients4 = compute_gradients(intermediate),
+                   windowed_gradients4 = compute_windowed_gradients(intermediate, windowed_intermediate);
     // extrapolate
-    windowed_expectations[0] += dtd6 * (windowed_gradients1[0] + 2.0 * windowed_gradients2[0] + 2.0 * windowed_gradients3[0] + windowed_gradients4[0]);
-    for (size_t i = 1; i < expectations.size(); i++) {
-                 expectations[i] += dtd6 * (         gradients1[i] + 2.0 *          gradients2[i] + 2.0 *          gradients3[i] +          gradients4[i]);
-        windowed_expectations[i] += dtd6 * (windowed_gradients1[i] + 2.0 * windowed_gradients2[i] + 2.0 * windowed_gradients3[i] + windowed_gradients4[i]);
-    }
+    windowed_set.add_((windowed_gradient1 + windowed_gradient2 * 2.0 + windowed_gradient3 * 2.0 + windowed_gradients4) * dtd6);
+    expectation_set.add_((gradient1 + gradient2 * 2.0 + gradient3 * 2.0 + gradients4) * dtd6);
 }

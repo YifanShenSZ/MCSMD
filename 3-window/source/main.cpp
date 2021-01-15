@@ -12,7 +12,7 @@ std::vector<at::Tensor> & expectations,
 const tchem::gaussian::Gaussian & window,
 std::vector<at::Tensor> & windowed_expectations, const double & dt);
 
-std::vector<at::Tensor>  update_windows(
+std::vector<at::Tensor> update_windows(
 const std::vector<at::Tensor> & expectations,
 const tchem::gaussian::Gaussian & window);
 
